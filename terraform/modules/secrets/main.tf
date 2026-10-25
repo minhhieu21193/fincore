@@ -9,6 +9,7 @@ resource "random_password" "this" {
 }
 
 resource "aws_secretsmanager_secret" "this" {
+  #checkov:skip=CKV2_AWS_57:Phase 1 static secrets; Phase 2 replaces DB passwords with Vault dynamic credentials, webhook secret rotation is a merchant-coordinated process
   for_each                = var.generated
   name                    = each.key
   description             = "FinCore ${each.key} (managed by Terraform)"

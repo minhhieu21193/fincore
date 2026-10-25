@@ -2,16 +2,10 @@
 # (all nodes and pods), database subnets (Aurora). Interface endpoints keep
 # ECR pulls, STS, SQS and Secrets Manager traffic off the NAT gateway.
 
-data "aws_availability_zones" "available" {
-  state = "available"
-  filter {
-    name   = "opt-in-status"
-    values = ["opt-in-not-required"]
-  }
-}
-
 locals {
-  azs = slice(data.aws_availability_zones.available.names, 0, 3)
+  # Explicit AZs: subnet CIDRs are bound to AZ positions, so the set must
+  # never change silently when AWS adds a zone.
+  azs = var.azs
 }
 
 module "vpc" {
@@ -62,6 +56,7 @@ module "vpc" {
 }
 
 resource "aws_security_group" "endpoints" {
+  #checkov:skip=CKV2_AWS_5:Attached to the interface endpoints via module.endpoints security_group_ids
   name        = "${var.name}-vpc-endpoints"
   description = "HTTPS from inside the VPC to interface endpoints"
   vpc_id      = module.vpc.vpc_id

@@ -54,6 +54,12 @@ variable "create_github_oidc_provider" {
   default     = true
 }
 
+variable "azs" {
+  description = "Three availability zones in the region."
+  type        = list(string)
+  default     = ["ap-southeast-1a", "ap-southeast-1b", "ap-southeast-1c"]
+}
+
 variable "vpc_cidr" {
   description = "VPC CIDR."
   type        = string

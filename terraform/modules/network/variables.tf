@@ -3,6 +3,16 @@ variable "name" {
   type        = string
 }
 
+variable "azs" {
+  description = "Exactly three availability zones."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.azs) == 3
+    error_message = "Provide exactly three AZs."
+  }
+}
+
 variable "cidr" {
   description = "VPC CIDR block (/16 recommended)."
   type        = string

@@ -6,6 +6,9 @@ locals {
 }
 
 data "aws_iam_policy_document" "kms" {
+  #checkov:skip=CKV_AWS_109:KMS key policy; "*" resource means this key only
+  #checkov:skip=CKV_AWS_111:KMS key policy; "*" resource means this key only
+  #checkov:skip=CKV_AWS_356:KMS key policy; "*" resource means this key only
   statement {
     sid       = "AccountRoot"
     actions   = ["kms:*"]
@@ -30,6 +33,9 @@ resource "aws_kms_alias" "state" {
 }
 
 resource "aws_s3_bucket" "state" {
+  #checkov:skip=CKV_AWS_144:Single-region demo; versioning protects against overwrite/deletion
+  #checkov:skip=CKV_AWS_18:Access logging would need a second bucket; CloudTrail data events cover state access (Phase 2)
+  #checkov:skip=CKV2_AWS_62:No consumer for state-bucket event notifications
   bucket        = local.bucket
   force_destroy = false # state must survive a careless destroy
 }

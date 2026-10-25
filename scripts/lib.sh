@@ -12,6 +12,7 @@ export HELM_REPOSITORY_CACHE="$ROOT/.tools/helm/cache"
 mkdir -p "$ROOT/.tools/helm/cache"
 
 # Every FinCore image built for kind: <image name>:<service dir>:<cmd>
+# shellcheck disable=SC2034 # used by scripts that source this file
 IMAGES=(
   "payments-api:payments-api:payments-api"
   "ledger:ledger:ledger"

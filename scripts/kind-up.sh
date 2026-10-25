@@ -4,6 +4,7 @@
 #   local "secrets" -> git server -> Argo CD -> root app-of-apps -> wait for Healthy.
 # Safe to re-run. Never talks to AWS.
 set -euo pipefail
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 need kind kubectl helm docker yq git openssl
 

@@ -5,6 +5,7 @@
 #   scripts/build-images.sh --only payments-api --tag 0.1.1
 #   scripts/build-images.sh --only payments-api --tag 0.1.1-bad --fault-rate 0.5   # deliberately bad build
 set -euo pipefail
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
 ONLY="" TAG="" FAULT_RATE="0" LOAD=1

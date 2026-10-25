@@ -10,6 +10,7 @@
 # 4. the bad commit is reverted (git stays the source of truth) and the
 #    Rollout returns to Healthy on the stable version.
 set -euo pipefail
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 need kubectl jq git yq
 

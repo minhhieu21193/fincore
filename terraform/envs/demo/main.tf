@@ -25,6 +25,7 @@ module "network" {
   source             = "../../modules/network"
   name               = local.name
   cidr               = var.vpc_cidr
+  azs                = var.azs
   cluster_name       = local.name
   single_nat_gateway = var.single_nat_gateway
   kms_key_arn        = module.kms.key_arn

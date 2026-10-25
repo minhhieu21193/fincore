@@ -54,8 +54,13 @@ func handler(root string) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		// The regexp admits no path separators; reject ".." explicitly too.
+		if strings.Contains(m[1], "..") {
+			http.NotFound(w, r)
+			return
+		}
 		repo := filepath.Join(root, m[1])
-		if _, err := os.Stat(repo); err != nil {
+		if _, err := os.Stat(repo); err != nil { //nolint:gosec // name validated above, joined under a fixed root
 			http.NotFound(w, r)
 			return
 		}

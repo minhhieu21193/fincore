@@ -6,6 +6,7 @@
 # The release commit is reverted at the end (rollbackWindow makes that an
 # immediate switch back to the previous ReplicaSet) unless --keep is given.
 set -euo pipefail
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 need kubectl jq git yq
 KEEP=0; [[ "${1:-}" == "--keep" ]] && KEEP=1

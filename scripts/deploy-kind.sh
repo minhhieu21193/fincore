@@ -6,6 +6,7 @@
 #   scripts/deploy-kind.sh payments-api 0.1.1
 #   scripts/deploy-kind.sh payments-api 0.1.1-bad --fault-rate 0.5
 set -euo pipefail
+# shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 need git yq kubectl
 

@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1.20@sha256:26147acbda4f14c5add9946e2fd2ed543fc402884fd75146bd342a7f6271dc1d
+# checkov:skip=CKV_DOCKER_2:Kubernetes ignores Docker HEALTHCHECK; the chart defines startup/liveness/readiness probes (distroless has no shell to run one)
 #
 # One Dockerfile for every FinCore binary:
 #   docker build -f build/Dockerfile --build-arg SERVICE=payments-api --build-arg CMD=payments-api .

@@ -9,6 +9,9 @@ locals {
 }
 
 data "aws_iam_policy_document" "this" {
+  #checkov:skip=CKV_AWS_109:KMS key policy; "*" resource means this key only
+  #checkov:skip=CKV_AWS_111:KMS key policy; "*" resource means this key only
+  #checkov:skip=CKV_AWS_356:KMS key policy; "*" resource means this key only
   # Key administration and usage are delegated to IAM policies in this account.
   statement {
     sid       = "AccountRoot"

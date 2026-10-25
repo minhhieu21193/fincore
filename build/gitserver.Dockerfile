@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1.20@sha256:26147acbda4f14c5add9946e2fd2ed543fc402884fd75146bd342a7f6271dc1d
+# checkov:skip=CKV_DOCKER_2:Kubernetes ignores Docker HEALTHCHECK; the chart defines startup/liveness/readiness probes (distroless has no shell to run one)
 # Local-only read-only git server for Argo CD on kind (see tools/gitserver).
 FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine3.23@sha256:754d5200fc3edae76d3b6598a9a3fac7e74981ee6a5413ab955025f185753ef2 AS build
 ARG TARGETOS
