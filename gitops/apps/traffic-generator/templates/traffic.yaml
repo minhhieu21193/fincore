@@ -35,7 +35,7 @@ spec:
       containers:
         - name: k6
           image: {{ .Values.image }}
-          args: ["run", "--quiet", "--no-summary", "/scripts/traffic.js"]
+          args: ["run", "--quiet", "--summary-mode=disabled", "/scripts/traffic.js"]
           env:
             - { name: TARGET, value: {{ .Values.target | quote }} }
             - { name: RATE, value: {{ .Values.rate | quote }} }
