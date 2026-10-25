@@ -1,0 +1,15 @@
+installCRDs: true
+controller:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 96Mi }
+    limits: { memory: 256Mi }
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false   # enabled per env once the Prometheus CRDs exist
+dashboard:
+  enabled: true
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 64Mi }

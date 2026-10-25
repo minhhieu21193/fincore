@@ -1,0 +1,60 @@
+# Argo CD (chart argo/argo-cd 10.11.1, app v3.5.6). Installed by scripts/kind-up.sh
+# on kind and by terraform/envs/demo (helm_release) on EKS.
+global:
+  domain: argocd.local
+
+configs:
+  params:
+    server.insecure: true            # TLS terminates at the ingress / port-forward
+    controller.diff.server.side: true
+  cm:
+    timeout.reconciliation: 60s
+    # Argo CD does not assess the health of child Applications by default;
+    # without this, sync waves in the app-of-apps would not wait for each
+    # component to become Healthy before starting the next wave.
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = ""
+      if obj.status ~= nil then
+        if obj.status.health ~= nil then
+          hs.status = obj.status.health.status
+          if obj.status.health.message ~= nil then
+            hs.message = obj.status.health.message
+          end
+        end
+      end
+      return hs
+  repositories:
+    karpenter:
+      name: karpenter
+      type: helm
+      url: public.ecr.aws/karpenter
+      enableOCI: "true"
+
+dex:
+  enabled: false
+notifications:
+  enabled: false
+applicationSet:
+  replicas: 1
+  resources:
+    requests: { cpu: 10m, memory: 48Mi }
+    limits: { memory: 128Mi }
+
+controller:
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 768Mi }
+repoServer:
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }
+server:
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { memory: 256Mi }
+redis:
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 128Mi }

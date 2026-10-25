@@ -1,0 +1,90 @@
+{{- $root := . -}}
+{{- range $name, $c := .Values.components }}
+{{- if $c.enabled }}
+{{- $ns := default $name $c.namespace }}
+{{- $valueFiles := list }}
+{{- range $c.valueFiles }}{{ $valueFiles = append $valueFiles . }}{{ end }}
+{{- /* Value files are relative to gitops/; the env-specific file is optional. */}}
+{{- $valueFiles = append $valueFiles (printf "envs/%s/values/%s.yaml" $root.Values.env $name) }}
+{{- $inline := dict }}
+{{- if $c.clusterValues }}{{ $inline = tpl $c.clusterValues $root | fromYaml }}{{ end }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $name }}
+  namespace: {{ $root.Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ $c.wave | default 0 | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ $ns }}
+  {{- if $c.chart }}
+  sources:
+    - repoURL: {{ $c.chart.repo }}
+      chart: {{ $c.chart.name }}
+      targetRevision: {{ $c.chart.version | quote }}
+      helm:
+        releaseName: {{ $name }}
+        ignoreMissingValueFiles: true
+        valueFiles:
+          {{- range $valueFiles }}
+          - $values/gitops/{{ . }}
+          {{- end }}
+        {{- if $inline }}
+        valuesObject:
+          {{- toYaml $inline | nindent 10 }}
+        {{- end }}
+    - repoURL: {{ $root.Values.repoURL }}
+      targetRevision: {{ $root.Values.targetRevision }}
+      ref: values
+  {{- else }}
+  source:
+    repoURL: {{ $root.Values.repoURL }}
+    targetRevision: {{ $root.Values.targetRevision }}
+    path: gitops/{{ $c.path }}
+    {{- if not $c.plainManifests }}
+    helm:
+      releaseName: {{ $name }}
+      ignoreMissingValueFiles: true
+      valueFiles:
+        {{- range $valueFiles }}
+        - {{ repeat (len (splitList "/" $c.path)) "../" }}{{ . }}
+        {{- end }}
+      {{- if $inline }}
+      valuesObject:
+        {{- toYaml $inline | nindent 8 }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- with $c.ignoreDifferences }}
+  ignoreDifferences:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply={{ $c.serverSideApply | default false }}
+      {{- range $c.syncOptions }}
+      - {{ . }}
+      {{- end }}
+    {{- with $c.namespaceLabels }}
+    managedNamespaceMetadata:
+      labels:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- end }}
+{{- end }}

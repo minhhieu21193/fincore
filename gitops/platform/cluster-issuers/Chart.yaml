@@ -1,0 +1,5 @@
+apiVersion: v2
+name: cluster-issuers
+description: cert-manager ClusterIssuers — Let's Encrypt (DNS-01 via Route 53) on AWS, a self-signed CA on kind.
+type: application
+version: 0.1.0

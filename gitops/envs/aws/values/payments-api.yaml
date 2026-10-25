@@ -1,0 +1,23 @@
+# image.tag is bumped by .github/workflows/release.yml after a successful push to ECR.
+image:
+  tag: 0.1.0
+env:
+  DB_SSLMODE: require
+nodeSelector:
+  fincore.io/node-role: workload
+topologySpread:
+  zoneWhenUnsatisfiable: DoNotSchedule
+rollout:
+  alb:
+    enabled: true
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    alb.ingress.kubernetes.io/healthcheck-path: /readyz
+    alb.ingress.kubernetes.io/load-balancer-attributes: deletion_protection.enabled=false,routing.http.drop_invalid_header_fields.enabled=true
+    alb.ingress.kubernetes.io/tags: Project=fincore

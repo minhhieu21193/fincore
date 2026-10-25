@@ -1,0 +1,38 @@
+{{- if and .Values.rollout.enabled .Values.rollout.analysis.enabled }}
+{{- $a := .Values.rollout.analysis -}}
+{{- $sel := printf "namespace=%q,app=%q,rollouts_pod_template_hash=\"{{args.canary-hash}}\",route!~%q" .Release.Namespace (include "svc.name" .) $a.excludeRoutes -}}
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "svc.name" . }}-canary-health
+  labels:
+    {{- include "svc.labels" . | nindent 4 }}
+spec:
+  args:
+    - name: canary-hash
+  metrics:
+    # Share of canary requests that did not fail with a 5xx.
+    - name: success-rate
+      initialDelay: {{ $a.initialDelay }}
+      interval: {{ $a.interval }}
+      failureLimit: {{ $a.failureLimit }}
+      successCondition: "len(result) > 0 && !isNaN(result[0]) && result[0] >= {{ $a.successRate }}"
+      provider:
+        prometheus:
+          address: {{ $a.prometheusAddress }}
+          query: |
+            sum(rate(http_requests_total{ {{- $sel -}} ,code!~"5.."}[1m]))
+            /
+            sum(rate(http_requests_total{ {{- $sel -}} }[1m]))
+    # p95 latency of canary requests.
+    - name: latency-p95
+      initialDelay: {{ $a.initialDelay }}
+      interval: {{ $a.interval }}
+      failureLimit: {{ $a.failureLimit }}
+      successCondition: "len(result) > 0 && (isNaN(result[0]) || result[0] <= {{ $a.p95Seconds }})"
+      provider:
+        prometheus:
+          address: {{ $a.prometheusAddress }}
+          query: |
+            histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{ {{- $sel -}} }[1m])))
+{{- end }}

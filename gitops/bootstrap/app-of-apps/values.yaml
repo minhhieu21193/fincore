@@ -1,0 +1,151 @@
+# Component catalogue. Every chart version is pinned here; environments
+# (gitops/envs/<env>/app-of-apps.yaml) only switch components on and inject
+# cluster-specific values.
+#
+# Per component:
+#   chart:          external Helm chart (repo, name, version), or
+#   path:           directory under gitops/ (a Helm chart unless plainManifests)
+#   valueFiles:     files under gitops/; gitops/envs/<env>/values/<component>.yaml
+#                   is always appended and may be absent
+#   clusterValues:  template rendered against these values into helm valuesObject
+#                   (used for account-specific values that never live in git)
+#   wave:           Argo CD sync wave (lower first)
+
+# -- Git repository Argo CD reads. Set per environment.
+repoURL: ""
+targetRevision: HEAD
+# -- Environment name: kind | aws
+env: ""
+
+# -- Cluster facts injected at bootstrap time (Terraform outputs on AWS). Never committed.
+cluster: {}
+
+components:
+  # ---------------------------------------------------------------- wave 0: controllers and CRDs
+  argo-rollouts:
+    enabled: false
+    wave: -10
+    namespace: argo-rollouts
+    chart: { repo: https://argoproj.github.io/argo-helm, name: argo-rollouts, version: 2.43.8 }
+    valueFiles: [platform/argo-rollouts/values.yaml]
+
+  metrics-server:
+    enabled: false
+    wave: -10
+    namespace: kube-system
+    chart: { repo: https://kubernetes-sigs.github.io/metrics-server/, name: metrics-server, version: 3.14.0 }
+    valueFiles: [platform/metrics-server/values.yaml]
+
+  cert-manager:
+    enabled: false
+    wave: -10
+    namespace: cert-manager
+    chart: { repo: https://charts.jetstack.io, name: cert-manager, version: v1.21.3 }
+    valueFiles: [platform/cert-manager/values.yaml]
+
+  external-secrets:
+    enabled: false
+    wave: -10
+    namespace: external-secrets
+    chart: { repo: https://charts.external-secrets.io, name: external-secrets, version: 2.14.0 }
+    valueFiles: [platform/external-secrets/values.yaml]
+
+  kube-prometheus-stack:
+    enabled: false
+    wave: -10
+    namespace: monitoring
+    serverSideApply: true
+    chart: { repo: https://prometheus-community.github.io/helm-charts, name: kube-prometheus-stack, version: 92.13.1 }
+    valueFiles: [platform/kube-prometheus-stack/values.yaml]
+
+  karpenter:
+    enabled: false
+    wave: -10
+    namespace: kube-system
+    chart: { repo: public.ecr.aws/karpenter, name: karpenter, version: 1.15.1 }
+    valueFiles: [platform/karpenter/values.yaml]
+
+  # ---------------------------------------------------------------- wave 1: cluster add-ons that need CRDs
+  aws-load-balancer-controller:
+    enabled: false
+    wave: -5
+    namespace: kube-system
+    chart: { repo: https://aws.github.io/eks-charts, name: aws-load-balancer-controller, version: 3.6.2 }
+    valueFiles: [platform/aws-load-balancer-controller/values.yaml]
+
+  external-dns:
+    enabled: false
+    wave: -5
+    namespace: external-dns
+    chart: { repo: https://kubernetes-sigs.github.io/external-dns/, name: external-dns, version: 1.23.0 }
+    valueFiles: [platform/external-dns/values.yaml]
+
+  karpenter-nodepools:
+    enabled: false
+    wave: -5
+    namespace: kube-system
+    path: platform/karpenter-nodepools
+
+  secret-stores:
+    enabled: false
+    wave: -5
+    namespace: external-secrets
+    path: platform/secret-stores
+
+  cluster-issuers:
+    enabled: false
+    wave: -5
+    namespace: cert-manager
+    path: platform/cluster-issuers
+
+  # ---------------------------------------------------------------- wave 2: data plane (kind only)
+  local-infra:
+    enabled: false
+    wave: 0
+    namespace: fincore-data
+    path: platform/local-infra
+    plainManifests: true
+
+  # ---------------------------------------------------------------- wave 3+: FinCore
+  fincore-base:
+    enabled: false
+    wave: 5
+    namespace: fincore
+    path: apps/fincore-base
+    namespaceLabels:
+      pod-security.kubernetes.io/enforce: restricted
+      pod-security.kubernetes.io/warn: restricted
+
+  ledger:
+    enabled: false
+    wave: 10
+    namespace: fincore
+    path: charts/fincore-service
+    valueFiles: [apps/ledger/values.yaml]
+
+  webhook-sink:
+    enabled: false
+    wave: 10
+    namespace: fincore
+    path: charts/fincore-service
+    valueFiles: [apps/webhook-sink/values.yaml]
+
+  payments-api:
+    enabled: false
+    wave: 15
+    namespace: fincore
+    path: charts/fincore-service
+    valueFiles: [apps/payments-api/values.yaml]
+
+  notifier:
+    enabled: false
+    wave: 15
+    namespace: fincore
+    path: charts/fincore-service
+    valueFiles: [apps/notifier/values.yaml]
+
+  traffic-generator:
+    enabled: false
+    wave: 20
+    namespace: fincore
+    path: apps/traffic-generator

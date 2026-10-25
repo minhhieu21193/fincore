@@ -1,0 +1,65 @@
+{{- $name := include "svc.name" . -}}
+{{- if .Values.rollout.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "svc.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "svc.selectorLabels" . | nindent 6 }}
+  template:
+    {{- include "svc.podTemplate" . | nindent 4 }}
+  strategy:
+    canary:
+      maxSurge: 1
+      maxUnavailable: 0
+      {{- if .Values.rollout.alb.enabled }}
+      canaryService: {{ $name }}-canary
+      stableService: {{ $name }}-stable
+      trafficRouting:
+        alb:
+          ingress: {{ $name }}
+          servicePort: {{ .Values.ports.http }}
+      {{- end }}
+      {{- if .Values.rollout.analysis.enabled }}
+      analysis:
+        templates:
+          - templateName: {{ $name }}-canary-health
+        startingStep: 1
+        args:
+          - name: canary-hash
+            valueFrom:
+              podTemplateHashValue: Latest
+      {{- end }}
+      steps:
+        {{- toYaml .Values.rollout.steps | nindent 8 }}
+{{- else }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "svc.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "svc.selectorLabels" . | nindent 6 }}
+  template:
+    {{- include "svc.podTemplate" . | nindent 4 }}
+{{- end }}

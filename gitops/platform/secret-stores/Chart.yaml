@@ -1,0 +1,5 @@
+apiVersion: v2
+name: secret-stores
+description: ClusterSecretStore "fincore-secrets" — AWS Secrets Manager on EKS, a Kubernetes namespace on kind. ExternalSecrets are identical in both.
+type: application
+version: 0.1.0

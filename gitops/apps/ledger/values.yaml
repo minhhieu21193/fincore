@@ -1,0 +1,18 @@
+nameOverride: ledger
+replicas: 2
+env:
+  DB_NAME: ledger
+  DB_USER: ledger
+  DB_PORT: "5432"
+  DB_MAX_CONNS: "10"
+secretEnv:
+  DB_PASSWORD: { secret: ledger-db, key: password }
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { memory: 192Mi }
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+rollout:
+  enabled: true

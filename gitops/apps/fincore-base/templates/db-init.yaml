@@ -1,0 +1,82 @@
+{{- $db := .Values.database -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init
+data:
+  init.sh: |
+    #!/bin/sh
+    # Idempotent: creates/updates one login role and one database per service.
+    # Works with a real superuser (kind) and with Aurora's rds_superuser.
+    set -eu
+    until pg_isready -q; do echo "waiting for database"; sleep 2; done
+    for svc in {{ join " " $db.services }}; do
+      pw_var="$(echo "$svc" | tr '[:lower:]' '[:upper:]')_DB_PASSWORD"
+      eval "pw=\${$pw_var}"
+      psql -v ON_ERROR_STOP=1 -v svc="$svc" -v pw="$pw" <<'SQL'
+    SELECT format('CREATE ROLE %I LOGIN', :'svc')
+     WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'svc') \gexec
+    ALTER ROLE :"svc" WITH LOGIN PASSWORD :'pw';
+    -- PG16+: the creating role needs membership to create a database owned by it.
+    SELECT format('GRANT %I TO CURRENT_USER', :'svc')
+     WHERE NOT pg_has_role(CURRENT_USER, :'svc', 'MEMBER') \gexec
+    SELECT format('CREATE DATABASE %I OWNER %I', :'svc', :'svc')
+     WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'svc') \gexec
+    REVOKE ALL ON DATABASE :"svc" FROM PUBLIC;
+    SQL
+      echo "database $svc ready"
+    done
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-init
+  annotations:
+    # Re-run on every sync (the script is idempotent) so rotated passwords are applied.
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 600
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: db-init
+          image: {{ .Values.dbInit.image }}
+          command: ["/bin/sh", "/scripts/init.sh"]
+          env:
+            - { name: PGHOST, value: {{ $db.host | quote }} }
+            - { name: PGPORT, value: {{ $db.port | quote }} }
+            - { name: PGDATABASE, value: postgres }
+            - { name: PGSSLMODE, value: {{ $db.sslmode | quote }} }
+            - name: PGUSER
+              valueFrom: { secretKeyRef: { name: db-admin, key: username } }
+            - name: PGPASSWORD
+              valueFrom: { secretKeyRef: { name: db-admin, key: password } }
+            - name: PAYMENTS_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: payments-db, key: password } }
+            - name: LEDGER_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: ledger-db, key: password } }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: scripts
+          configMap: { name: db-init }
+        - name: tmp
+          emptyDir: {}

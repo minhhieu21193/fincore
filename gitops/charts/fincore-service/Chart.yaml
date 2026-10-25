@@ -1,0 +1,7 @@
+apiVersion: v2
+name: fincore-service
+description: Generic chart for FinCore services (Deployment or Argo Rollouts canary, HPA, PDB, topology spread, PodMonitor, canary analysis).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.33.0-0"

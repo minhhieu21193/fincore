@@ -1,0 +1,4 @@
+image:
+  repository: fincore/webhook-sink
+  tag: 0.1.0
+  pullPolicy: Never

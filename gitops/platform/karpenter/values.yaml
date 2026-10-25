@@ -1,0 +1,14 @@
+# settings.clusterName / clusterEndpoint / interruptionQueue are injected from
+# Terraform outputs at bootstrap (see envs/aws/app-of-apps.yaml).
+replicas: 2
+controller:
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { memory: 512Mi }
+# Karpenter must never run on nodes it manages.
+nodeSelector:
+  fincore.io/node-role: system
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+    effect: NoSchedule

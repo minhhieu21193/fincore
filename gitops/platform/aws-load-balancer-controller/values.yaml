@@ -1,0 +1,15 @@
+# clusterName / region / vpcId injected at bootstrap. Credentials via EKS Pod Identity.
+replicaCount: 2
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller
+enableServiceMutatorWebhook: false
+resources:
+  requests: { cpu: 50m, memory: 96Mi }
+  limits: { memory: 256Mi }
+nodeSelector:
+  fincore.io/node-role: system
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+    effect: NoSchedule

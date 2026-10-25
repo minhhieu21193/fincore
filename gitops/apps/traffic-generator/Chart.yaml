@@ -1,0 +1,5 @@
+apiVersion: v2
+name: traffic-generator
+description: Steady background payment traffic (k6) so canary analysis always has data. kind/demo only.
+type: application
+version: 0.1.0

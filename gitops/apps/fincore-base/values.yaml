@@ -1,0 +1,19 @@
+database:
+  host: postgres.fincore-data.svc.cluster.local
+  port: 5432
+  sslmode: disable
+  # -- Remote secret holding the admin credentials (keys: username, password).
+  # On AWS this is the RDS-managed master secret, injected at bootstrap.
+  adminSecretKey: fincore-db-admin
+  # -- Per-service roles and databases created by the db-init job.
+  services: [payments, ledger]
+
+# Remote secret names (identical on AWS Secrets Manager and the kind emulator).
+secrets:
+  refreshInterval: 1h
+  paymentsDb: fincore-payments-db
+  ledgerDb: fincore-ledger-db
+  webhookSigning: fincore-webhook-signing
+
+dbInit:
+  image: postgres:17.11-alpine3.23@sha256:01ea903aa65deb58eb49d6e09d859ecff63a6bb7d61feca55f2abad71d08f72a

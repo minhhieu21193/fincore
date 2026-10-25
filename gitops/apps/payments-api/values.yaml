@@ -1,0 +1,24 @@
+nameOverride: payments-api
+replicas: 3
+env:
+  LEDGER_URL: http://ledger.fincore.svc.cluster.local:8080
+  DB_NAME: payments
+  DB_USER: payments
+  DB_PORT: "5432"
+  DB_MAX_CONNS: "10"
+  PROCESSOR_LATENCY: 40ms
+  PROCESSOR_JITTER: 30ms
+  PROCESSOR_DECLINE_RATE: "0.02"
+  FEE_BPS: "290"
+  IDEMPOTENCY_LOCK_TTL: 30s
+secretEnv:
+  DB_PASSWORD: { secret: payments-db, key: password }
+resources:
+  requests: { cpu: 100m, memory: 64Mi }
+  limits: { memory: 192Mi }
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 12
+rollout:
+  enabled: true

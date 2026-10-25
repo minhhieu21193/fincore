@@ -1,0 +1,22 @@
+# kind: everything runs locally; AWS-only components stay disabled.
+env: kind
+# In-cluster read-only git server over the bind-mounted local repository
+# (installed by scripts/kind-up.sh). targetRevision is set to the current branch.
+repoURL: http://gitserver.gitserver.svc.cluster.local/fincore.git
+targetRevision: HEAD
+
+components:
+  argo-rollouts: { enabled: true }
+  metrics-server: { enabled: true }
+  cert-manager: { enabled: true }
+  external-secrets: { enabled: true }
+  kube-prometheus-stack: { enabled: true }
+  secret-stores: { enabled: true }
+  cluster-issuers: { enabled: true }
+  local-infra: { enabled: true }
+  fincore-base: { enabled: true }
+  ledger: { enabled: true }
+  webhook-sink: { enabled: true }
+  payments-api: { enabled: true }
+  notifier: { enabled: true }
+  traffic-generator: { enabled: true }
