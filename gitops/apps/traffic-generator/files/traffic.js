@@ -8,6 +8,10 @@ const MERCHANTS = ['m_acme', 'm_globex', 'm_initech', 'm_umbrella'];
 
 export const options = {
   discardResponseBodies: true,
+  // A new connection per request: kube-proxy balances per connection, so
+  // reused keep-alive connections would never reach a freshly started canary
+  // pod (an ALB on AWS balances per request anyway).
+  noConnectionReuse: true,
   scenarios: {
     steady: {
       executor: 'constant-arrival-rate',

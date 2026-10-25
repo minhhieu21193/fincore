@@ -88,6 +88,8 @@ podAnnotations: {}
 # Argo Rollouts canary. When disabled a plain Deployment with a rolling update is rendered.
 rollout:
   enabled: false
+  # -- A rollback to one of the last N revisions is applied immediately, without canary steps.
+  rollbackWindowRevisions: 3
   steps:
     - setWeight: 10
     - pause: { duration: 90s }
@@ -105,6 +107,9 @@ rollout:
     initialDelay: 60s
     interval: 30s
     failureLimit: 1
+    # -- Measurements without data tolerated before the analysis is Inconclusive
+    # (the rollout then pauses for a human instead of promoting blindly).
+    inconclusiveLimit: 4
     # -- Routes excluded from analysis (probes).
     excludeRoutes: "GET /(healthz|readyz)"
   # Weighted traffic split on an AWS ALB (requires ingress.enabled). Without it

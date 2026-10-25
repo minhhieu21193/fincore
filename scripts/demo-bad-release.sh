@@ -55,6 +55,11 @@ AR="$(kubectl -n fincore get analysisrun -l rollouts-pod-template-hash="$CANARY_
 echo "   AnalysisRun $(jq -r .metadata.name <<<"$AR"): $(jq -r .status.phase <<<"$AR")"
 jq -r '.status.metricResults[] | "     \(.name): \(.phase) — measurements: \([.measurements[] | "\(.phase):\(.value)"] | join(", "))"' <<<"$AR"
 
+# The abort must come from real evidence, not from missing data.
+EVIDENCE="$(jq '[.status.metricResults[] | .measurements[] | select(.phase == "Failed" and .value != "[]" and .value != null)] | length' <<<"$AR")"
+[[ "$EVIDENCE" -ge 1 ]] || die "analysis failed without data; this is not a valid detection"
+ok "abort backed by $EVIDENCE failed measurement(s) with data"
+
 wait_for "canary scaled to zero" 120 bash -c "[[ \$(kubectl -n fincore get rs -l rollouts-pod-template-hash=$CANARY_HASH -o jsonpath='{.items[0].status.replicas}') == 0 ]]"
 STABLE_NOW="$(ro | jq -r .status.stableRS)"
 [[ "$STABLE_NOW" == "$STABLE_HASH" ]] || die "stable ReplicaSet changed ($STABLE_NOW)"

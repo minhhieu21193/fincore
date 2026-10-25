@@ -16,7 +16,11 @@ spec:
       initialDelay: {{ $a.initialDelay }}
       interval: {{ $a.interval }}
       failureLimit: {{ $a.failureLimit }}
+      inconclusiveLimit: {{ $a.inconclusiveLimit }}
+      # No data yet (new pod not scraped, or no requests in the window) is
+      # inconclusive, never a pass or a fail.
       successCondition: "len(result) > 0 && !isNaN(result[0]) && result[0] >= {{ $a.successRate }}"
+      failureCondition: "len(result) > 0 && !isNaN(result[0]) && result[0] < {{ $a.successRate }}"
       provider:
         prometheus:
           address: {{ $a.prometheusAddress }}
@@ -29,7 +33,9 @@ spec:
       initialDelay: {{ $a.initialDelay }}
       interval: {{ $a.interval }}
       failureLimit: {{ $a.failureLimit }}
-      successCondition: "len(result) > 0 && (isNaN(result[0]) || result[0] <= {{ $a.p95Seconds }})"
+      inconclusiveLimit: {{ $a.inconclusiveLimit }}
+      successCondition: "len(result) > 0 && !isNaN(result[0]) && result[0] <= {{ $a.p95Seconds }}"
+      failureCondition: "len(result) > 0 && !isNaN(result[0]) && result[0] > {{ $a.p95Seconds }}"
       provider:
         prometheus:
           address: {{ $a.prometheusAddress }}
