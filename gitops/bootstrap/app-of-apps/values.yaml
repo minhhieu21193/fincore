@@ -47,6 +47,7 @@ components:
     enabled: false
     wave: -10
     namespace: external-secrets
+    serverSideApply: true   # CRDs exceed the client-side last-applied annotation limit
     chart: { repo: https://charts.external-secrets.io, name: external-secrets, version: 2.14.0 }
     valueFiles: [platform/external-secrets/values.yaml]
 

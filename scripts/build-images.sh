@@ -23,7 +23,8 @@ COMMIT="$(git -C "$ROOT" rev-parse --short HEAD)"
 
 load() {
   if [[ $LOAD == 1 ]]; then
-    kind load docker-image --name "$CLUSTER" "$1" >/dev/null
+    local out
+    out="$(kind load docker-image --name "$CLUSTER" "$1" 2>&1)" || { echo "$out" >&2; die "kind load failed for $1"; }
     ok "loaded $1 into kind/$CLUSTER"
   fi
 }

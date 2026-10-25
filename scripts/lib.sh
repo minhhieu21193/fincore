@@ -6,6 +6,10 @@ CLUSTER="${CLUSTER:-fincore}"
 export KUBECONFIG="${KUBECONFIG:-$ROOT/.kube/kind-config}"
 # Pinned tools that are not on PATH by default (see README "Prerequisites").
 [[ -d "$ROOT/.tools/bin" ]] && export PATH="$ROOT/.tools/bin:$PATH"
+# Hermetic Helm repository config: never depend on (or modify) the user's global repos.
+export HELM_REPOSITORY_CONFIG="$ROOT/.tools/helm/repositories.yaml"
+export HELM_REPOSITORY_CACHE="$ROOT/.tools/helm/cache"
+mkdir -p "$ROOT/.tools/helm/cache"
 
 # Every FinCore image built for kind: <image name>:<service dir>:<cmd>
 IMAGES=(
