@@ -1,0 +1,161 @@
+openapi: 3.1.0
+info:
+  title: FinCore Ledger API
+  version: 1.0.0
+  description: |
+    Double-entry ledger. Every transaction is a set of entries whose debits
+    equal its credits; PostgreSQL enforces this with deferred constraint
+    triggers, independent of this API. Entries are append-only and balances
+    are derived (`SUM`) — there is no mutable balance column.
+
+    Account classes come from the code prefix: `assets:`, `liabilities:`,
+    `equity:`, `revenue:`, `expenses:`. Accounts are created on first use.
+servers:
+  - url: http://localhost:8080
+paths:
+  /v1/transactions:
+    post:
+      operationId: postTransaction
+      summary: Post a balanced transaction (idempotent on external_ref)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TransactionInput" }
+            example:
+              external_ref: payment:6f1c...:capture
+              currency: USD
+              description: card capture
+              entries:
+                - { account: assets:processor_receivable, direction: debit, amount: 1000 }
+                - { account: liabilities:merchant:m_demo, direction: credit, amount: 971 }
+                - { account: revenue:fees, direction: credit, amount: 29 }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transaction" }
+        "200":
+          description: Identical request replayed; the original transaction is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transaction" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409":
+          description: external_ref already used with a different request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: Unbalanced, malformed, or currency mismatch.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/transactions/{external_ref}:
+    get:
+      operationId: getTransaction
+      parameters:
+        - { name: external_ref, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The transaction.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Transaction" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/accounts/{code}/balance:
+    get:
+      operationId: getBalance
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Derived balance.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Balance" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/invariants:
+    get:
+      operationId: getInvariants
+      summary: Global check that total debits equal total credits per currency
+      responses:
+        "200":
+          description: Invariant status.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [balanced, imbalance_by_currency]
+                properties:
+                  balanced: { type: boolean }
+                  imbalance_by_currency:
+                    type: object
+                    additionalProperties: { type: integer, format: int64 }
+  /healthz:
+    get:
+      operationId: liveness
+      responses: { "200": { description: Alive. } }
+  /readyz:
+    get:
+      operationId: readiness
+      responses:
+        "200": { description: Ready. }
+        "503": { description: Not ready. }
+components:
+  responses:
+    Error:
+      description: Error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    EntryInput:
+      type: object
+      additionalProperties: false
+      required: [account, direction, amount]
+      properties:
+        account: { type: string, pattern: "^[a-z_]+(:[A-Za-z0-9_.-]+)+$" }
+        direction: { type: string, enum: [debit, credit] }
+        amount: { type: integer, format: int64, minimum: 1 }
+    TransactionInput:
+      type: object
+      additionalProperties: false
+      required: [external_ref, currency, entries]
+      properties:
+        external_ref: { type: string, minLength: 1, maxLength: 200 }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        description: { type: string }
+        entries:
+          type: array
+          minItems: 2
+          items: { $ref: "#/components/schemas/EntryInput" }
+    Transaction:
+      type: object
+      required: [id, external_ref, currency, entries, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        external_ref: { type: string }
+        currency: { type: string }
+        description: { type: string }
+        entries:
+          type: array
+          items: { $ref: "#/components/schemas/EntryInput" }
+        created_at: { type: string, format: date-time }
+    Balance:
+      type: object
+      required: [account, type, currency, debits, credits, balance]
+      properties:
+        account: { type: string }
+        type: { type: string, enum: [asset, liability, equity, revenue, expense] }
+        currency: { type: string }
+        debits: { type: integer, format: int64 }
+        credits: { type: integer, format: int64 }
+        balance: { type: integer, format: int64, description: On the account type's normal side. }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        message: { type: string }
