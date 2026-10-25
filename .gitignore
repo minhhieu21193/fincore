@@ -1,0 +1,25 @@
+# Local tooling / per-user config (never committed)
+.claude/
+.tools/
+.kube/
+.idea/
+.vscode/
+.DS_Store
+
+# Build & test output
+bin/
+dist/
+coverage.out
+*.test
+loadtest/results/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+*.auto.tfvars
+backend.hcl
+!backend.hcl.example
+.terraform.tfstate.lock.info
