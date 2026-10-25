@@ -74,3 +74,23 @@ Vault, Kyverno, cosign/SBOM, NetworkPolicies/CDE zone, WAF (Phase 2). Grafana/Lo
 ## Risks
 - Laptop resources (Docker VM: 4 CPU / 8 GB): Prometheus is trimmed (no Grafana, no Alertmanager, 6h retention) and requests are kept small.
 - Argo CD reads only committed content, so each local change must be committed before it syncs.
+
+## As built: deviations from this plan and why
+
+| Plan said | Built | Why |
+|---|---|---|
+| System node group "tainted for critical add-ons" | **Labelled** `fincore.io/node-role=system`, not tainted. Karpenter is pinned to it with a nodeSelector. | Argo CD sync waves wait for each wave to be Healthy. With a taint, every wave −10 add-on would stay Pending until Karpenter's NodePools (wave −5) existed, which is a deadlock. |
+| Image tags in `gitops/envs/kind/apps/*.yaml` | `gitops/envs/<env>/values/<component>.yaml` | One convention for every component (add-ons and services). |
+| Canary analysis: "first failed measurement fails the run" | `failureLimit: 1` (two failed measurements abort), **no data = inconclusive** (`inconclusiveLimit: 4`) | The first demo run aborted on *empty* measurements. The canary got no traffic because k6 reused keep-alive connections that kube-proxy had pinned to stable pods, so the rollback was right for the wrong reason. Now missing data can never pass or fail a release, and the demo asserts that the abort is backed by measured values. |
+| Traffic generator | Opens a new connection per request (`noConnectionReuse`) | Same root cause. ALBs balance per request, so this matches production. |
+| — | `rollbackWindow: 3` on Rollouts | Reverting to a recent revision switches back immediately, without walking the canary again. |
+| Helm 3 implied | Helm **4.3.1** pinned locally (`.tools/bin`) and in CI | Current stable. The scripts use a hermetic repo config (`.tools/helm`), so the user's global Helm repos are never read or modified. |
+| `checkov` via Homebrew | checkov 3.3.30 in a Python 3.13 venv under `.tools/` | The Homebrew build (Python 3.15) fails to load `pyexpat` on this macOS. |
+| `tflint` via Homebrew | Release binary 0.65.0, checksum-verified, in `.tools/bin` | No longer in Homebrew core. |
+| Trivy action in CI | Trivy CLI 0.76.1, pinned and checksum-verified (`scripts/ci/install-trivy.sh`) | Avoids depending on a third-party action's mutable tags. |
+| kind git source | In-cluster read-only smart-HTTP git server (`tools/gitserver`, ~100 lines) over the bind-mounted `.git`. Argo CD tracks `HEAD`. | Argo CD can sync local commits with no remote. No Gitea or registry is needed, and nothing is pushed anywhere. |
+| — | Bumped `golang.org/x/net` to v0.60.0 | Trivy flagged CVE-2026-78669 (HTTP/2 SETTINGS flood, HIGH, fixable). The CI gate would have failed. |
+
+Not verifiable without AWS (documented, not guessed):
+- The `eks-pod-identity-agent` add-on version has no public table. `terraform.tfvars.example` says how to look it up. The other three add-on versions come from the EKS user guide for 1.36.
+- Terraform is `validate`d, `tflint`ed and `checkov`ed, but never planned against a real account. `allowed_account_ids` makes a wrong-account apply impossible.
