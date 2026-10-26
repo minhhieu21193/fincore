@@ -4,7 +4,7 @@
 // signed, distroless, non-root image so it passes the same admission policies
 // as the services.
 //
-//	netprobe [-timeout 3s] name=host:port ...
+//	netprobe [-timeout 3s] [-delay 0s] name=host:port ...
 package main
 
 import (
@@ -21,11 +21,13 @@ import (
 
 func main() {
 	timeout := flag.Duration("timeout", 3*time.Second, "connect timeout per target")
+	delay := flag.Duration("delay", 0, "wait before probing (lets the network policy engine see a new pod)")
 	flag.Parse()
 	if flag.NArg() == 0 {
-		fmt.Fprintln(os.Stderr, "usage: netprobe [-timeout 3s] name=host:port ...")
+		fmt.Fprintln(os.Stderr, "usage: netprobe [-timeout 3s] [-delay 0s] name=host:port ...")
 		os.Exit(2)
 	}
+	time.Sleep(*delay)
 	for _, arg := range flag.Args() {
 		name, addr, ok := strings.Cut(arg, "=")
 		if !ok {

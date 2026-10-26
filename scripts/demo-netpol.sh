@@ -24,9 +24,9 @@ docker build -q -f "$ROOT/build/Dockerfile" --build-arg SERVICE=netprobe --build
   -t "fincore/netprobe:$tag" "$ROOT" >/dev/null
 PROBE="$("$ROOT/scripts/publish-image.sh" "fincore/netprobe:$tag")"
 
-# probe <namespace> <name> <cde:true|false> <targets...>: prints netprobe's report.
+# probe <namespace> <name> <cde:true|false> <delay> <targets...>: prints netprobe's report.
 probe() {
-  local ns="$1" name="$2" cde="$3"; shift 3
+  local ns="$1" name="$2" cde="$3" delay="$4"; shift 4
   local placement=""
   if [[ "$cde" == true ]]; then
     placement='"nodeSelector": {"fincore.io/node-role": "cde"},
@@ -44,7 +44,7 @@ probe() {
     "securityContext": {"runAsNonRoot": true, "runAsUser": 65532, "seccompProfile": {"type": "RuntimeDefault"}},
     "containers": [{
       "name": "netprobe", "image": "$PROBE",
-      "args": ["-timeout", "$TIMEOUT"$(printf ', "%s"' "$@")],
+      "args": ["-timeout", "$TIMEOUT", "-delay", "$delay"$(printf ', "%s"' "$@")],
       "resources": {"requests": {"cpu": "10m", "memory": "16Mi"}, "limits": {"memory": "32Mi"}},
       "securityContext": {"allowPrivilegeEscalation": false, "readOnlyRootFilesystem": true, "capabilities": {"drop": ["ALL"]}}
     }]
@@ -72,7 +72,7 @@ expect() {
 
 CDE_SVC="$NS_CDE.svc.cluster.local"
 log "1. from OUTSIDE the zone: a pod in namespace $NS_APP (where the notifier runs)"
-out="$(probe "$NS_APP" netprobe-outside false \
+out="$(probe "$NS_APP" netprobe-outside false 0s \
   "ledger=ledger.$CDE_SVC:8080" \
   "payments-api=payments-api.$CDE_SVC:8080" \
   "postgres=postgres.fincore-data.svc.cluster.local:5432" \
@@ -86,7 +86,10 @@ expect "$out" queue BLOCKED
 expect "$out" "internet(control)" OPEN
 
 log "2. from INSIDE the zone: a pod in $NS_CDE on a CDE node, with no allow rule of its own"
-in="$(probe "$NS_CDE" netprobe-inside true \
+# kindnet adds a new pod to its enforced set about a second after the pod starts
+# (docs/phase-2-results.md, "Findings"); the probe measures the steady state.
+# The VPC CNI on EKS behaves the same in its default "standard" mode.
+in="$(probe "$NS_CDE" netprobe-inside true 10s \
   "internet=$CONTROL_TARGET" \
   "ledger=ledger.$CDE_SVC:8080" \
   "postgres=postgres.fincore-data.svc.cluster.local:5432")"
