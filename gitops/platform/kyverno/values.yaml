@@ -16,7 +16,7 @@ admissionController:
   replicas: 1
   container:
     resources:
-      requests: { cpu: 50m, memory: 128Mi }
+      requests: { cpu: 200m, memory: 128Mi }
       limits: { memory: 384Mi }
 # No generate / mutate-existing policies, no reports, no cleanup policies.
 backgroundController:

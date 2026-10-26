@@ -13,7 +13,9 @@ spec:
   validationActions: [Deny]
   failurePolicy: Fail
   webhookConfiguration:
-    timeoutSeconds: 20
+    # Kubernetes maximum: verification fetches signatures and the SBOM
+    # attestation from the registry, twice per request (mutate + validate).
+    timeoutSeconds: 30
   evaluation:
     background:
       enabled: false
