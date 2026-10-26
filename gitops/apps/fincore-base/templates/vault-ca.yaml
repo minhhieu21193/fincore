@@ -1,0 +1,23 @@
+{{- if .Values.vaultClientCA.enabled }}
+# Vault Agent sidecars must trust Vault's server certificate. This certificate,
+# issued by the same internal CA, exists for the ca.crt in its Secret: that is
+# what the agents mount (vault.hashicorp.com/tls-secret: vault-ca).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vault-ca
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  secretName: vault-ca
+  commonName: vault-client.{{ .Release.Namespace }}
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages: [client auth]
+  issuerRef:
+    kind: ClusterIssuer
+    name: fincore-internal
+{{- end }}

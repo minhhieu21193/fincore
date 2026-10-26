@@ -33,7 +33,7 @@ metadata:
     {{- with .Values.podLabels }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
-  {{- with .Values.podAnnotations }}
+  {{- with include "svc.podAnnotations" . | fromYaml }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -112,6 +112,10 @@ spec:
         - name: {{ $name }}
           value: {{ $value | toString | quote }}
         {{- end }}
+        {{- if .Values.vault.enabled }}
+        - name: DB_CREDENTIALS_FILE
+          value: /vault/secrets/db.json
+        {{- end }}
         {{- range $name, $ref := .Values.secretEnv }}
         - name: {{ $name }}
           valueFrom:
@@ -136,4 +140,34 @@ spec:
         readOnlyRootFilesystem: true
         capabilities:
           drop: ["ALL"]
+  {{- if .Values.vault.enabled }}
+  volumes:
+    # Token for Vault's Kubernetes auth only (audience "vault"): the Kubernetes
+    # API rejects it, and the pod has no API token at all.
+    - name: vault-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              path: token
+              audience: vault
+              expirationSeconds: 3600
+  {{- end }}
+{{- end -}}
+
+{{/* Pod annotations, plus the Vault Agent injector's when vault.enabled. */}}
+{{- define "svc.podAnnotations" -}}
+{{- $a := deepCopy (.Values.podAnnotations | default dict) -}}
+{{- if .Values.vault.enabled -}}
+{{- $v := .Values.vault -}}
+{{- if not (and $v.role $v.databaseCredentialsPath) }}{{ fail "vault.role and vault.databaseCredentialsPath are required" }}{{ end -}}
+{{- $tpl := printf "{{- with secret %q -}}{\"username\":{{ .Data.username | toJSON }},\"password\":{{ .Data.password | toJSON }}}{{- end }}" $v.databaseCredentialsPath -}}
+{{- $_ := set $a "vault.hashicorp.com/agent-inject" "true" -}}
+{{- $_ := set $a "vault.hashicorp.com/role" $v.role -}}
+{{- $_ := set $a "vault.hashicorp.com/agent-inject-secret-db.json" $v.databaseCredentialsPath -}}
+{{- $_ := set $a "vault.hashicorp.com/agent-inject-template-db.json" $tpl -}}
+{{- $_ := set $a "vault.hashicorp.com/agent-service-account-token-volume-name" "vault-token" -}}
+{{- $_ := set $a "vault.hashicorp.com/tls-secret" $v.caSecret -}}
+{{- $_ := set $a "vault.hashicorp.com/ca-cert" "/vault/tls/ca.crt" -}}
+{{- end -}}
+{{- toYaml $a -}}
 {{- end -}}

@@ -43,17 +43,19 @@ spec:
       targetRevision: {{ $root.Values.targetRevision }}
       ref: values
   {{- else }}
+  {{- /* path: under gitops/; repoPath: from the repository root (e.g. policies) */}}
+  {{- $path := $c.repoPath | default (printf "gitops/%s" $c.path) }}
   source:
     repoURL: {{ $root.Values.repoURL }}
     targetRevision: {{ $root.Values.targetRevision }}
-    path: gitops/{{ $c.path }}
+    path: {{ $path }}
     {{- if not $c.plainManifests }}
     helm:
       releaseName: {{ $name }}
       ignoreMissingValueFiles: true
       valueFiles:
         {{- range $valueFiles }}
-        - {{ repeat (len (splitList "/" $c.path)) "../" }}{{ . }}
+        - {{ repeat (len (splitList "/" $path)) "../" }}gitops/{{ . }}
         {{- end }}
       {{- if $inline }}
       valuesObject:

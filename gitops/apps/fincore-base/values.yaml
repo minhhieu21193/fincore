@@ -3,6 +3,9 @@
 #   fincore-base -> namespace "fincore"      (this file)
 #   cde-base     -> namespace "fincore-cde"  (+ gitops/apps/cde-base/values.yaml)
 
+# -- app (namespace fincore) | cde (namespace fincore-cde, the cardholder-data zone)
+zone: app
+
 database:
   host: postgres.fincore-data.svc.cluster.local
   port: 5432
@@ -10,8 +13,14 @@ database:
   # -- Remote secret holding the admin credentials (keys: username, password).
   # On AWS this is the RDS-managed master secret, injected at bootstrap.
   adminSecretKey: fincore-db-admin
-  # -- Per-service roles and databases created by the db-init job.
-  services: [payments, ledger]
+  # -- Per-service owner roles and databases created by the db-init job.
+  # credentials: static (password from the secrets store) | vault (Vault-issued users).
+  services:
+    - { name: payments, credentials: static }
+    - { name: ledger, credentials: vault }
+  # -- Vault's database admin role (only when a service uses credentials=vault).
+  vaultAdmin:
+    role: vault_admin
 
 secrets:
   refreshInterval: 1h
@@ -23,4 +32,34 @@ secrets:
 # -- Creates the per-service roles and databases (cardholder-data zone only).
 dbInit:
   enabled: false
+  nodeSelector: {}
+  tolerations: []
   image: postgres:17.11-alpine3.23@sha256:01ea903aa65deb58eb49d6e09d859ecff63a6bb7d61feca55f2abad71d08f72a
+
+# -- Publish the internal CA as Secret vault-ca for Vault Agent sidecars.
+vaultClientCA:
+  enabled: false
+
+networkPolicies:
+  enabled: true
+  monitoringNamespace: monitoring
+  vaultNamespace: vault
+  appNamespace: fincore
+  # Peers outside the zone. kind: pods in fincore-data. AWS: CIDRs (cidrs set),
+  # optionally on a different port (cidrPort).
+  database:
+    namespace: fincore-data
+    podLabels: { app.kubernetes.io/name: postgres }
+    port: 5432
+    cidrs: []
+  queue:
+    namespace: fincore-data
+    podLabels: { app.kubernetes.io/name: elasticmq }
+    port: 9324
+    # AWS: the SQS interface endpoint (HTTPS) inside the VPC.
+    cidrPort: 443
+    cidrs: []
+  # -- Callers of payments-api outside the cluster (AWS: the ALB's public subnets).
+  ingressCidrs: []
+  # -- AWS: EKS Pod Identity agent (169.254.170.23/32) for SDK credentials.
+  awsCredentialsCidrs: []

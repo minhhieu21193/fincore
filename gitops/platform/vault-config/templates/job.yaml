@@ -1,0 +1,83 @@
+{{- $roles := keys .Values.databaseRoles | sortAlpha }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-config
+  annotations:
+    # Applied on every sync; the script is idempotent. Fails (and Argo CD
+    # retries) until scripts/vault-init.sh has initialised Vault.
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vault-config
+    spec:
+      serviceAccountName: vault-configurer
+      automountServiceAccountToken: false
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: configure
+          image: {{ .Values.image }}
+          command: ["/bin/sh", "/config/configure.sh"]
+          env:
+            - { name: VAULT_ADDR, value: {{ .Values.vaultAddr | quote }} }
+            - { name: VAULT_CACERT, value: /vault-tls/ca.crt }
+            - { name: HOME, value: /tmp }
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+            - { name: DB_CONNECTION, value: {{ .Values.database.connection | quote }} }
+            - { name: DB_HOST, value: {{ .Values.database.host | quote }} }
+            - { name: DB_PORT, value: {{ .Values.database.port | quote }} }
+            - { name: DB_SSLMODE, value: {{ .Values.database.sslmode | quote }} }
+            - { name: DB_ADMIN_ROLE, value: {{ .Values.database.adminRole | quote }} }
+            - { name: DB_ROLES, value: {{ join "," $roles | quote }} }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: config, mountPath: /config, readOnly: true }
+            - { name: vault-token, mountPath: /var/run/secrets/vault, readOnly: true }
+            - { name: vault-tls, mountPath: /vault-tls, readOnly: true }
+            - { name: db-admin, mountPath: /secrets/db-admin, readOnly: true }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: config
+          configMap:
+            name: vault-config
+            items:
+              - { key: configure.sh, path: configure.sh }
+              - { key: sql.create.sql, path: sql/create.sql }
+              - { key: sql.revoke.sql, path: sql/revoke.sql }
+              - { key: policy.vault-configurer.hcl, path: policies/vault-configurer.hcl }
+              {{- range $roles }}
+              - { key: policy.{{ . }}-db.hcl, path: policies/{{ . }}-db.hcl }
+              - { key: role.{{ . }}, path: roles/{{ . }} }
+              {{- end }}
+        # Short-lived token for Vault only (audience "vault"); the Kubernetes API rejects it.
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken: { path: token, audience: vault, expirationSeconds: 600 }
+        - name: vault-tls
+          secret:
+            secretName: vault-server-tls
+            items: [{ key: ca.crt, path: ca.crt }]
+        - name: db-admin
+          secret: { secretName: vault-db-admin }
+        - name: tmp
+          emptyDir: {}

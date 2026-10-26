@@ -30,8 +30,8 @@ kind-up: ## Create/update the local platform on kind
 	scripts/kind-up.sh
 
 .PHONY: kind-down
-kind-down: ## Delete the kind cluster
-	scripts/kind-down.sh
+kind-down: ## Delete the kind cluster (PURGE=1 also removes the local registry and PKI)
+	scripts/kind-down.sh $(if $(PURGE),--purge)
 
 .PHONY: e2e
 e2e: ## Acceptance: payment flows API -> ledger -> outbox -> queue -> webhook
@@ -44,6 +44,22 @@ demo-good-release: ## Healthy build is promoted 10 -> 30 -> 60 -> 100% (commits 
 .PHONY: demo-bad-release
 demo-bad-release: ## Bad build is rolled back automatically (commits to the current branch, then reverts)
 	scripts/demo-bad-release.sh
+
+.PHONY: demo-policies
+demo-policies: ## Phase 2 B1: unsigned, unattested, foreign and root workloads are rejected at admission
+	scripts/demo-policies.sh
+
+.PHONY: demo-netpol
+demo-netpol: ## Phase 2 B3: NetworkPolicies isolate the cardholder-data zone
+	scripts/demo-netpol.sh
+
+.PHONY: demo-rotation
+demo-rotation: ## Phase 2 B2: the ledger's Vault-issued DB credentials rotate without a restart
+	scripts/demo-rotation.sh
+
+.PHONY: vault-init
+vault-init: ## One-time Vault initialisation (run by kind-up; on EKS run it once by hand)
+	scripts/vault-init.sh
 
 .PHONY: loadtest
 loadtest: ## k6 load test against a port-forwarded payments-api (RPS=50 DURATION=2m)

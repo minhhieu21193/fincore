@@ -1,0 +1,5 @@
+apiVersion: v2
+name: vault-config
+description: Vault configuration as code - audit device, Kubernetes auth, policies and the database secrets engine - applied by an idempotent Job on every sync.
+type: application
+version: 0.1.0

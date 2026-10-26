@@ -7,7 +7,7 @@
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
-need kind kubectl helm docker yq git openssl jq
+need kind kubectl helm docker yq git openssl jq uuidgen
 
 NODE_IMAGE="kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed"
 ARGOCD_CHART_VERSION="10.11.1"
@@ -138,6 +138,32 @@ ensure_secret fincore-db-admin username=postgres "password=$(rand)"
 ensure_secret fincore-payments-db "password=$(rand)"
 ensure_secret fincore-ledger-db "password=$(rand)"
 ensure_secret fincore-webhook-signing "secret=$(rand)"
+# Bootstrap password of Vault's database admin role; Vault rotates it on first use.
+ensure_secret fincore-vault-db-admin "password=$(rand)"
+
+# Seed of the local KMS emulator (kind's stand-in for the Vault unseal key in AWS KMS):
+# a random 256-bit key, generated once per cluster.
+kubectl create namespace vault --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+if ! kubectl -n vault get secret local-kms-seed >/dev/null 2>&1; then
+  seed="$(mktemp)"
+  key_id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+  cat > "$seed" <<SEED
+Keys:
+  Symmetric:
+    Aes:
+      - Metadata:
+          KeyId: $key_id
+          Description: FinCore Vault auto-unseal (kind)
+        BackingKeys:
+          - $(openssl rand -hex 32)
+Aliases:
+  - AliasName: alias/fincore-vault-unseal
+    TargetKeyId: $key_id
+SEED
+  kubectl -n vault create secret generic local-kms-seed --from-file=seed.yaml="$seed" >/dev/null
+  rm -f "$seed"
+  ok "created local KMS seed"
+fi
 
 # The public half of the local signing key, read by Kyverno's image verification policy.
 kubectl create namespace kyverno --dry-run=client -o yaml | kubectl apply -f - >/dev/null
@@ -192,11 +218,21 @@ all_healthy() {
   [[ "$(jq '.items | length' <<<"$out")" -gt 1 ]] || return 1
   [[ "$(jq '[.items[] | select(.status.sync.status != "Synced" or .status.health.status != "Healthy")] | length' <<<"$out")" == 0 ]]
 }
+# Vault turns Healthy only once initialised, and later sync waves wait for it:
+# initialise it (once) as soon as its first pod runs.
+vault_ready_for_init() {
+  [[ "$(kubectl -n vault get pod vault-0 -o jsonpath='{.status.containerStatuses[0].started}' 2>/dev/null)" == true ]]
+}
+vault_done=0
 start=$SECONDS
 until all_healthy; do
-  if (( SECONDS - start > 1200 )); then
+  if [[ $vault_done == 0 ]] && vault_ready_for_init; then
+    "$ROOT/scripts/vault-init.sh"
+    vault_done=1
+  fi
+  if (( SECONDS - start > 1800 )); then
     kubectl -n argocd get applications.argoproj.io
-    die "applications not healthy after 20 minutes"
+    die "applications not healthy after 30 minutes"
   fi
   sleep 10
 done
@@ -211,4 +247,6 @@ cat <<INFO
   Payments API:   kubectl -n $NS_CDE port-forward svc/payments-api 8080:8080
   End-to-end:     make e2e
   Bad release:    make demo-bad-release
+  Phase 2 demos:  make demo-policies | demo-netpol | demo-rotation
+  Vault recovery keys: $ROOT/.kube/vault-init.json (local only)
 INFO

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: vault-base
+description: Prerequisites of the Vault release - its TLS certificate (internal CA) and the vault namespace's NetworkPolicies.
+type: application
+version: 0.1.0

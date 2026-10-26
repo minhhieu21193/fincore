@@ -59,6 +59,25 @@ components:
     chart: { repo: https://prometheus-community.github.io/helm-charts, name: kube-prometheus-stack, version: 92.13.1 }
     valueFiles: [platform/kube-prometheus-stack/values.yaml]
 
+  kyverno:
+    enabled: false
+    wave: -10
+    namespace: kyverno
+    serverSideApply: true   # CRDs exceed the client-side last-applied annotation limit
+    chart: { repo: https://kyverno.github.io/kyverno/, name: kyverno, version: 3.9.2 }
+    valueFiles: [platform/kyverno/values.yaml]
+
+  # kind only: KMS API emulator for Vault's awskms auto-unseal.
+  local-kms:
+    enabled: false
+    wave: -10
+    namespace: vault
+    path: platform/local-kms
+    plainManifests: true
+    namespaceLabels: &vaultNamespaceLabels
+      pod-security.kubernetes.io/enforce: restricted
+      pod-security.kubernetes.io/warn: restricted
+
   karpenter:
     enabled: false
     wave: -10
@@ -99,6 +118,35 @@ components:
     namespace: cert-manager
     path: platform/cluster-issuers
 
+  # Kyverno admission policies (top-level policies/ chart).
+  policies:
+    enabled: false
+    wave: -5
+    namespace: kyverno
+    repoPath: policies
+
+  # Vault: TLS certificate and NetworkPolicies, then the HA cluster. Vault only
+  # turns Healthy once initialised (scripts/vault-init.sh, run by kind-up.sh).
+  vault-base:
+    enabled: false
+    wave: -4
+    namespace: vault
+    path: platform/vault-base
+    namespaceLabels: *vaultNamespaceLabels
+
+  vault:
+    enabled: false
+    wave: -3
+    namespace: vault
+    chart: { repo: https://helm.releases.hashicorp.com, name: vault, version: 0.34.1 }
+    valueFiles: [platform/vault/values.yaml]
+    # The injector rotates its webhook CA bundle at runtime.
+    ignoreDifferences:
+      - group: admissionregistration.k8s.io
+        kind: MutatingWebhookConfiguration
+        jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+    syncOptions: [RespectIgnoreDifferences=true]
+
   # ---------------------------------------------------------------- wave 2: data plane (kind only)
   local-infra:
     enabled: false
@@ -132,6 +180,14 @@ components:
       pod-security.kubernetes.io/warn: restricted
       fincore.io/zone: cde
       fincore.io/policy: enforced
+
+  # Vault configuration (auth, policies, database engine): after db-init has
+  # created the roles Vault manages, before the ledger asks for credentials.
+  vault-config:
+    enabled: false
+    wave: 6
+    namespace: vault
+    path: platform/vault-config
 
   ledger:
     enabled: false

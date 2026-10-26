@@ -5,3 +5,6 @@ image:
 env:
   DB_HOST: postgres.fincore-data.svc.cluster.local
   DB_SSLMODE: disable
+  # Vault-issued users live 3 minutes on kind (demo); recycle connections often.
+  DB_MAX_CONN_LIFETIME: 30s
+  DB_HEALTH_CHECK_PERIOD: 5s

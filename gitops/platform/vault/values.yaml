@@ -1,0 +1,160 @@
+# HashiCorp Vault: HA with integrated Raft storage, TLS everywhere, auto-unseal
+# with AWS KMS (kind: the local-kms emulator through the same "awskms" seal),
+# and the agent injector that gives the ledger short-lived database users.
+# Initialised once by scripts/vault-init.sh; configured by the vault-config app.
+global:
+  tlsDisable: false
+
+injector:
+  enabled: true
+  replicas: 1
+  image:
+    repository: hashicorp/vault-k8s
+    tag: "1.7.6@sha256:55e27b080c9b0469fd420dfb3631243488c6319504b779423caa46c529a95490"
+  # Must match the approved third-party image in policies/values.yaml exactly.
+  agentImage:
+    repository: hashicorp/vault
+    tag: "2.2.1@sha256:962a92876e168d68eaaa24b0b8b49bbce1cb63024060a67bba95cd158a366fc2"
+  agentDefaults:
+    cpuRequest: 10m
+    cpuLimit: 200m
+    memRequest: 32Mi
+    memLimit: 64Mi
+    templateConfig:
+      exitOnRetryFailure: true
+  # Only the cardholder-data zone uses injection, and there it fails closed: a
+  # ledger pod is never created without its credentials agent.
+  namespaceSelector:
+    matchLabels:
+      fincore.io/zone: cde
+  failurePolicy: Fail
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 64Mi }
+  securityContext:
+    pod:
+      runAsNonRoot: true
+      runAsUser: 100
+      runAsGroup: 1000
+      seccompProfile: { type: RuntimeDefault }
+    container:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities: { drop: [ALL] }
+
+server:
+  image:
+    repository: hashicorp/vault
+    tag: "2.2.1@sha256:962a92876e168d68eaaa24b0b8b49bbce1cb63024060a67bba95cd158a366fc2"
+  # Rolling the StatefulSet is a deliberate operator action (one pod at a time,
+  # standbys first), never a side effect of a sync.
+  updateStrategyType: OnDelete
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+  statefulSet:
+    securityContext:
+      pod:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      container:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: [ALL] }
+  # Certificate issued by the internal CA (gitops/platform/vault-base).
+  volumes:
+    - name: vault-server-tls
+      secret:
+        secretName: vault-server-tls
+  volumeMounts:
+    - name: vault-server-tls
+      mountPath: /vault/userconfig/vault-server-tls
+      readOnly: true
+  extraEnvironmentVars:
+    VAULT_CACERT: /vault/userconfig/vault-server-tls/ca.crt
+    # awskms seal: region and key come from the environment (envs/<env>/values/vault.yaml).
+    AWS_REGION: ap-southeast-1
+  dataStorage:
+    enabled: true
+    size: 2Gi
+  auditStorage:
+    enabled: false   # the audit device writes to stdout (collected with the pod logs)
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: topology.kubernetes.io/zone
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: vault
+          component: server
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ template "vault.name" . }}
+              app.kubernetes.io/instance: "{{ .Release.Name }}"
+              component: server
+          topologyKey: kubernetes.io/hostname
+  ha:
+    enabled: true
+    replicas: 3
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+        ui = true
+        disable_mlock = true
+
+        listener "tcp" {
+          address         = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_cert_file   = "/vault/userconfig/vault-server-tls/tls.crt"
+          tls_key_file    = "/vault/userconfig/vault-server-tls/tls.key"
+          tls_min_version = "tls13"
+          telemetry {
+            unauthenticated_metrics_access = true
+          }
+        }
+
+        storage "raft" {
+          path = "/vault/data"
+          retry_join {
+            leader_api_addr     = "https://vault-0.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+          }
+          retry_join {
+            leader_api_addr     = "https://vault-1.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+          }
+          retry_join {
+            leader_api_addr     = "https://vault-2.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+          }
+        }
+
+        # Key id, region and (kind) endpoint come from VAULT_AWSKMS_SEAL_KEY_ID,
+        # AWS_REGION and AWS_KMS_ENDPOINT.
+        seal "awskms" {}
+
+        telemetry {
+          prometheus_retention_time = "30s"
+          disable_hostname          = true
+        }
+
+        service_registration "kubernetes" {}
+
+ui:
+  enabled: true
+
+csi:
+  enabled: false
+
+serverTelemetry:
+  serviceMonitor:
+    enabled: true
+    selectors: {}
+    tlsConfig:
+      insecureSkipVerify: true

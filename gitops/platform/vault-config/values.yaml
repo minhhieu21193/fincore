@@ -1,0 +1,25 @@
+# Vault configuration as code. The Job authenticates with Kubernetes auth (role
+# vault-configurer, created once by scripts/vault-init.sh); no static token exists.
+vaultAddr: https://vault-active.vault.svc:8200
+image: hashicorp/vault:2.2.1@sha256:962a92876e168d68eaaa24b0b8b49bbce1cb63024060a67bba95cd158a366fc2
+
+database:
+  # -- Name of the Vault database connection.
+  connection: fincore-postgres
+  host: postgres.fincore-data.svc.cluster.local
+  port: 5432
+  sslmode: disable
+  # -- Role created by db-init (CREATEROLE); its bootstrap password is rotated by Vault on first use.
+  adminRole: vault_admin
+  adminSecretRemote: fincore-vault-db-admin
+
+# -- Dynamic database roles: short-lived PostgreSQL users that are members of
+# the service's owner role (and act as it), bound to one Kubernetes service account.
+databaseRoles:
+  ledger:
+    ownerRole: ledger
+    serviceAccount: ledger
+    namespace: fincore-cde
+    # kind: short, so the demo shows rotations within minutes. AWS: 1h.
+    defaultTTL: 3m
+    maxTTL: 3m

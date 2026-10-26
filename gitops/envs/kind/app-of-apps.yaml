@@ -11,6 +11,12 @@ components:
   cert-manager: { enabled: true }
   external-secrets: { enabled: true }
   kube-prometheus-stack: { enabled: true }
+  kyverno: { enabled: true }
+  local-kms: { enabled: true }
+  policies: { enabled: true }
+  vault-base: { enabled: true }
+  vault: { enabled: true }
+  vault-config: { enabled: true }
   secret-stores: { enabled: true }
   cluster-issuers: { enabled: true }
   local-infra: { enabled: true }

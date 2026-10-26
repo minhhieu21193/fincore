@@ -1,9 +1,17 @@
 # Cardholder-data zone (namespace fincore-cde): database bootstrap and the
 # credentials of the services inside the zone.
+zone: cde
+vaultClientCA:
+  enabled: true
 dbInit:
   enabled: true
+  nodeSelector:
+    fincore.io/node-role: cde
+  tolerations:
+    - { key: fincore.io/zone, operator: Equal, value: cde, effect: NoSchedule }
 secrets:
   items:
     payments-db: { remote: fincore-payments-db, keys: [password] }
-    ledger-db: { remote: fincore-ledger-db, keys: [password] }
+    # The ledger has no static password: Vault issues short-lived users.
+    vault-db-admin: { remote: fincore-vault-db-admin, keys: [password] }
     webhook-signing: null   # not needed inside the zone
