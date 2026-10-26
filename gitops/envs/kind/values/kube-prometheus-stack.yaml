@@ -1,0 +1,9 @@
+# kind (laptop VM): no default alerting/recording rules (nothing uses them
+# before Phase 3's SLO rules) and a 30s default scrape. FinCore's PodMonitors
+# keep their own 15s interval for the canary analysis.
+defaultRules:
+  create: false
+prometheus:
+  prometheusSpec:
+    scrapeInterval: 30s
+    evaluationInterval: 30s

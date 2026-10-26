@@ -5,6 +5,10 @@ configs:
   cm:
     timeout.reconciliation: 60s
   params:
+    # Server-side diff dry-run-applies every resource (Kyverno's CRDs are
+    # megabytes) through the API server on each reconciliation; on the laptop
+    # VM that alone kept the API server busy. AWS keeps server-side diff.
+    controller.diff.server.side: false
     controller.status.processors: 10
     controller.operation.processors: 5
     reposerver.parallelism.limit: 2
