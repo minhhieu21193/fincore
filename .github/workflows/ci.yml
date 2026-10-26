@@ -77,6 +77,11 @@ jobs:
           tar -xzf /tmp/actionlint.tgz -C "$HOME/bin" actionlint
           shellcheck --version | head -2   # preinstalled on GitHub-hosted Ubuntu runners
           curl -sSfL -o "$HOME/bin/yq" https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_amd64 && chmod +x "$HOME/bin/yq"
+      - name: Cache Helm charts (pinned versions, keyed on the catalogue)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tools/helm/charts
+          key: helm-charts-${{ hashFiles('gitops/bootstrap/app-of-apps/values.yaml') }}
       - name: Run static checks
         run: scripts/check.sh --static
 

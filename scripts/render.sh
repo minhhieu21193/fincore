@@ -24,6 +24,30 @@ helm template root "$ROOT/gitops/bootstrap/app-of-apps" -n argocd \
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
+# chart_tgz <repo> <chart> <version>: path of the chart archive, pulled once into
+# a local cache (CI caches this directory). Public registries rate-limit shared
+# CI runners (public.ecr.aws answers 429), so pulls are retried with backoff.
+CHART_CACHE="${CHART_CACHE:-$ROOT/.tools/helm/charts}"
+chart_tgz() {
+  local repo="$1" chart="$2" version="$3" dir src attempt
+  dir="$CHART_CACHE/$(printf '%s' "$repo" | tr -c 'A-Za-z0-9.-' '_')/$chart/$version"
+  if ! compgen -G "$dir/*.tgz" >/dev/null; then
+    if [[ "$repo" == *://* ]]; then
+      src=("$chart" --repo "$repo")
+    else
+      src=("oci://$repo/$chart")                   # OCI registry (e.g. Karpenter)
+    fi
+    mkdir -p "$dir"
+    for attempt in 1 2 3 4 5; do
+      helm pull "${src[@]}" --version "$version" -d "$dir" >&2 && break
+      (( attempt == 5 )) && die "could not pull chart $chart $version from $repo"
+      warn "pull of $chart $version failed (attempt $attempt), retrying in $(( attempt * 15 ))s"
+      sleep $(( attempt * 15 ))
+    done
+  fi
+  compgen -G "$dir/*.tgz" | head -1
+}
+
 for app in $(yq -N -r 'select(.kind == "Application") | .metadata.name' "$OUT/00-app-of-apps.yaml"); do
   yq "select(.kind == \"Application\" and .metadata.name == \"$app\")" "$OUT/00-app-of-apps.yaml" > "$tmp/app.yaml"
   ns="$(yq -r '.spec.destination.namespace' "$tmp/app.yaml")"
@@ -48,12 +72,7 @@ for app in $(yq -N -r 'select(.kind == "Application") | .metadata.name' "$OUT/00
       f="$ROOT/${vf#\$values/}"
       [[ -f "$f" ]] && args+=(-f "$f")
     done
-    if [[ "$repo" == *://* ]]; then
-      src=("$chart" --repo "$repo")
-    else
-      src=("oci://$repo/$chart")                   # OCI registry (e.g. Karpenter)
-    fi
-    helm template "$app" "${src[@]}" --version "$version" -n "$ns" --kube-version "$K8S_VERSION" \
+    helm template "$app" "$(chart_tgz "$repo" "$chart" "$version")" -n "$ns" --kube-version "$K8S_VERSION" \
       ${args[@]+"${args[@]}"} -f "$tmp/inline.yaml" > "$OUT/$app.yaml"
   fi
 done
