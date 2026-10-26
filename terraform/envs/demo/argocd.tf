@@ -59,6 +59,12 @@ resource "helm_release" "root_app" {
                 dbHost                     = module.aurora.endpoint
                 dbAdminSecretName          = module.aurora.master_user_secret_arn
                 paymentEventsQueueUrl      = module.queues.queue_url
+                vpcCidr                    = module.network.vpc_cidr_block
+                publicSubnetCidrs          = module.network.public_subnet_cidrs
+                databaseSubnetCidrs        = module.network.database_subnet_cidrs
+                vaultKmsKeyId              = module.vault_kms.key_arn
+                kmsKeyArn                  = module.kms.key_arn
+                wafAclArn                  = module.waf.web_acl_arn
               }
             }
           }

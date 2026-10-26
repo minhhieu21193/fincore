@@ -1,0 +1,6 @@
+# AWS: Vault-issued ledger users live one hour (the ledger recycles connections
+# every 10 minutes, see gitops/apps/ledger/values.yaml).
+databaseRoles:
+  ledger:
+    defaultTTL: 1h
+    maxTTL: 1h

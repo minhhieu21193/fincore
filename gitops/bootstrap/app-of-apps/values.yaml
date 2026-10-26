@@ -100,6 +100,13 @@ components:
     chart: { repo: https://kubernetes-sigs.github.io/external-dns/, name: external-dns, version: 1.23.0 }
     valueFiles: [platform/external-dns/values.yaml]
 
+  # AWS: encrypted gp3 StorageClass for stateful add-ons (Vault Raft).
+  storage:
+    enabled: false
+    wave: -5
+    namespace: kube-system
+    path: platform/storage
+
   karpenter-nodepools:
     enabled: false
     wave: -5

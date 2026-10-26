@@ -1,6 +1,6 @@
 # Application secrets in Secrets Manager. External Secrets syncs them into
 # the cluster; names match the kind emulator so manifests are identical.
-# Phase 2 replaces the static database passwords with Vault dynamic credentials.
+# The ledger has no entry here: Vault issues its database users (Phase 2).
 
 resource "random_password" "this" {
   for_each = var.generated
@@ -9,7 +9,7 @@ resource "random_password" "this" {
 }
 
 resource "aws_secretsmanager_secret" "this" {
-  #checkov:skip=CKV2_AWS_57:Phase 1 static secrets; Phase 2 replaces DB passwords with Vault dynamic credentials, webhook secret rotation is a merchant-coordinated process
+  #checkov:skip=CKV2_AWS_57:Rotation is handled per secret: Vault rotates its admin password on first use and issues short-lived ledger users; payments-api moves to Vault next; webhook secret rotation is coordinated with merchants
   for_each                = var.generated
   name                    = each.key
   description             = "FinCore ${each.key} (managed by Terraform)"
