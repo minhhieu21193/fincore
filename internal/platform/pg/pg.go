@@ -3,28 +3,46 @@ package pg
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/minhhieu21193/fincore/internal/platform/config"
+	"github.com/minhhieu21193/fincore/internal/platform/httpx"
 )
 
+var credentialChanges = promauto.With(httpx.Registry).NewCounter(prometheus.CounterOpts{
+	Name: "fincore_db_credential_changes_total",
+	Help: "Times the database credentials file changed user (rotation by the secrets agent).",
+})
+
 // Connect creates a pool from either DATABASE_URL or the DB_* variables
-// (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD or DB_PASSWORD_FILE,
-// DB_SSLMODE).
+// (DB_HOST, DB_PORT, DB_NAME, DB_SSLMODE and one way to authenticate).
 //
-// When DB_PASSWORD_FILE is used the file is re-read for every new physical
-// connection, so rotated credentials (e.g. written by a secrets agent) are
-// picked up without restarting the process.
+// Credentials, in order of precedence:
+//   - DB_CREDENTIALS_FILE: JSON {"username": "...", "password": "..."}, e.g.
+//     rendered by Vault Agent from a dynamic database secret;
+//   - DB_USER with DB_PASSWORD_FILE;
+//   - DB_USER with DB_PASSWORD.
+//
+// Files are re-read for every new physical connection, so rotated credentials
+// are picked up without restarting the process. DB_MAX_CONN_LIFETIME bounds how
+// long a connection keeps using the credentials it was opened with; keep it well
+// below the credentials' remaining lifetime when they are rotated.
 func Connect(ctx context.Context) (*pgxpool.Pool, error) {
+	credFile := os.Getenv("DB_CREDENTIALS_FILE")
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		host, err := config.Required("DB_HOST")
@@ -35,16 +53,18 @@ func Connect(ctx context.Context) (*pgxpool.Pool, error) {
 		if err != nil {
 			return nil, err
 		}
-		user, err := config.Required("DB_USER")
-		if err != nil {
-			return nil, err
-		}
 		u := url.URL{
 			Scheme:   "postgres",
-			User:     url.User(user),
 			Host:     net.JoinHostPort(host, config.String("DB_PORT", "5432")),
 			Path:     "/" + name,
 			RawQuery: "sslmode=" + config.String("DB_SSLMODE", "prefer"),
+		}
+		if credFile == "" {
+			user, err := config.Required("DB_USER")
+			if err != nil {
+				return nil, err
+			}
+			u.User = url.User(user)
 		}
 		dsn = u.String()
 	}
@@ -57,13 +77,24 @@ func Connect(ctx context.Context) (*pgxpool.Pool, error) {
 		return nil, err
 	}
 	cfg.MaxConns = int32(maxConns) //nolint:gosec // bounded by operator config
-	cfg.MaxConnLifetime = 30 * time.Minute
-	cfg.MaxConnIdleTime = 5 * time.Minute
+	if cfg.MaxConnLifetime, err = config.Duration("DB_MAX_CONN_LIFETIME", 30*time.Minute); err != nil {
+		return nil, err
+	}
+	cfg.MaxConnLifetimeJitter = cfg.MaxConnLifetime / 10
+	cfg.MaxConnIdleTime = min(5*time.Minute, cfg.MaxConnLifetime)
+	if cfg.HealthCheckPeriod, err = config.Duration("DB_HEALTH_CHECK_PERIOD", time.Minute); err != nil {
+		return nil, err
+	}
 
 	if pw := os.Getenv("DB_PASSWORD"); pw != "" {
 		cfg.ConnConfig.Password = pw
 	}
-	if file := os.Getenv("DB_PASSWORD_FILE"); file != "" {
+	switch {
+	case credFile != "":
+		src := &credentialsFile{path: credFile}
+		cfg.BeforeConnect = func(_ context.Context, cc *pgx.ConnConfig) error { return src.apply(cc) }
+	case os.Getenv("DB_PASSWORD_FILE") != "":
+		file := os.Getenv("DB_PASSWORD_FILE")
 		cfg.BeforeConnect = func(_ context.Context, cc *pgx.ConnConfig) error {
 			b, err := os.ReadFile(file) //nolint:gosec // path comes from trusted deployment config
 			if err != nil {
@@ -94,4 +125,55 @@ func Connect(ctx context.Context) (*pgxpool.Pool, error) {
 		slog.Warn("waiting for database", "error", err)
 		time.Sleep(2 * time.Second)
 	}
+}
+
+// Credentials is the content of DB_CREDENTIALS_FILE.
+type Credentials struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// ReadCredentials reads and validates a credentials file.
+func ReadCredentials(path string) (Credentials, error) {
+	var c Credentials
+	b, err := os.ReadFile(path) //nolint:gosec // path comes from trusted deployment config
+	if err != nil {
+		return c, fmt.Errorf("read DB_CREDENTIALS_FILE: %w", err)
+	}
+	if err := json.Unmarshal(b, &c); err != nil {
+		return c, fmt.Errorf("parse DB_CREDENTIALS_FILE: %w", err)
+	}
+	if c.Username == "" || c.Password == "" {
+		return c, errors.New("DB_CREDENTIALS_FILE: username and password are required")
+	}
+	return c, nil
+}
+
+// credentialsFile applies the current file content to each new connection and
+// reports when the user changes. The password is never logged.
+type credentialsFile struct {
+	path string
+	mu   sync.Mutex
+	user string
+}
+
+func (f *credentialsFile) apply(cc *pgx.ConnConfig) error {
+	c, err := ReadCredentials(f.path)
+	if err != nil {
+		return err
+	}
+	cc.User, cc.Password = c.Username, c.Password
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.user != c.Username {
+		if f.user == "" {
+			slog.Info("database credentials loaded", "db_user", c.Username)
+		} else {
+			slog.Info("database credentials rotated", "previous_db_user", f.user, "db_user", c.Username)
+			credentialChanges.Inc()
+		}
+		f.user = c.Username
+	}
+	return nil
 }
