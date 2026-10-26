@@ -25,12 +25,19 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 # chart_tgz <repo> <chart> <version>: path of the chart archive, pulled once into
-# a local cache (CI caches this directory). Public registries rate-limit shared
-# CI runners (public.ecr.aws answers 429), so pulls are retried with backoff.
+# a local cache (CI caches this directory) and retried with backoff. Charts that
+# shared CI runners cannot pull reliably are vendored, checksum-verified, in
+# gitops/ci/charts (see its README).
 CHART_CACHE="${CHART_CACHE:-$ROOT/.tools/helm/charts}"
 chart_tgz() {
   local repo="$1" chart="$2" version="$3" dir src attempt
   dir="$CHART_CACHE/$(printf '%s' "$repo" | tr -c 'A-Za-z0-9.-' '_')/$chart/$version"
+  local vendored="$ROOT/gitops/ci/charts/$chart-$version.tgz"
+  if [[ -f "$vendored" ]] && ! compgen -G "$dir/*.tgz" >/dev/null; then
+    (cd "$ROOT/gitops/ci/charts" && grep " $chart-$version.tgz\$" SHA256SUMS | shasum -a 256 -c - >/dev/null) \
+      || die "vendored chart $vendored does not match gitops/ci/charts/SHA256SUMS"
+    mkdir -p "$dir" && cp "$vendored" "$dir/"
+  fi
   if ! compgen -G "$dir/*.tgz" >/dev/null; then
     if [[ "$repo" == *://* ]]; then
       src=("$chart" --repo "$repo")
@@ -38,9 +45,9 @@ chart_tgz() {
       src=("oci://$repo/$chart")                   # OCI registry (e.g. Karpenter)
     fi
     mkdir -p "$dir"
-    for attempt in 1 2 3 4 5; do
+    for attempt in 1 2 3; do
       helm pull "${src[@]}" --version "$version" -d "$dir" >&2 && break
-      (( attempt == 5 )) && die "could not pull chart $chart $version from $repo"
+      (( attempt == 3 )) && die "could not pull chart $chart $version from $repo"
       warn "pull of $chart $version failed (attempt $attempt), retrying in $(( attempt * 15 ))s"
       sleep $(( attempt * 15 ))
     done
