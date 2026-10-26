@@ -3,7 +3,7 @@
 #
 #   scripts/check.sh            # everything
 #   scripts/check.sh --go       # go vet, go test, golangci-lint
-#   scripts/check.sh --static   # terraform, checkov, helm, kubeconform, actionlint, shellcheck
+#   scripts/check.sh --static   # terraform, checkov, helm, kubeconform, kyverno test, actionlint, shellcheck
 #
 # Go tests that need PostgreSQL run when TEST_DATABASE_URL is set
 # (make test-db starts one in docker).
@@ -14,7 +14,9 @@ cd "$ROOT"
 
 MODE="${1:---all}"
 K8S_VERSION=1.36.0
-# Pinned commit of the community CRD JSON-schema catalog (Rollouts, ExternalSecrets, ...).
+# Custom resources are validated against schemas generated from the CRDs our
+# pinned charts ship (scripts/ci/crd-schemas.sh); the community catalog at a
+# pinned commit is the fallback for CRDs installed outside the rendered apps.
 CRD_SCHEMAS="https://raw.githubusercontent.com/datreeio/CRDs-catalog/3eb90d47aba8d61919d4419dd38301536e32a94b/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
 FAILED=()
 
@@ -61,6 +63,9 @@ helm_lint() {
   "${lint[@]}" gitops/platform/secret-stores --set provider=aws &&
   "${lint[@]}" gitops/platform/cluster-issuers &&
   "${lint[@]}" gitops/platform/karpenter-nodepools --set clusterName=lint --set nodeRole=lint &&
+  "${lint[@]}" policies &&
+  "${lint[@]}" policies --set signature.mode=keyless &&
+  "${lint[@]}" gitops/apps/fincore-base -f gitops/apps/cde-base/values.yaml &&
   "${lint[@]}" gitops/bootstrap/app-of-apps -f gitops/envs/kind/app-of-apps.yaml &&
   "${lint[@]}" gitops/bootstrap/app-of-apps -f gitops/envs/aws/app-of-apps.yaml -f gitops/ci/aws-cluster.example.yaml
 }
@@ -70,24 +75,41 @@ kubeconform_envs() {
   out="$(mktemp -d)"
   for env in kind aws; do
     scripts/render.sh "$env" "$out/$env" >/dev/null || return 1
+  done
+  scripts/ci/crd-schemas.sh "$out/kind" "$out/aws" "$out/schemas" || return 1
+  for env in kind aws; do
     kubeconform -strict -summary -kubernetes-version "$K8S_VERSION" \
-      -schema-location default -schema-location "$CRD_SCHEMAS" \
+      -schema-location default \
+      -schema-location "$out/schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+      -schema-location "$CRD_SCHEMAS" \
       -skip CustomResourceDefinition \
       "$out/$env" gitops/bootstrap/kind/gitserver.yaml || return 1
   done
   rm -rf "$out"
 }
 
+# Admission policies against compliant and violating fixtures (policies/tests).
+policy_tests() {
+  local out
+  out="$(mktemp -d)"
+  cp policies/tests/kyverno-test.yaml policies/tests/resources.yaml policies/tests/values.yaml "$out/"
+  helm template policies policies | yq 'select(.kind == "ValidatingPolicy")' > "$out/policies.yaml" || return 1
+  kyverno test "$out" || return 1
+  rm -rf "$out"
+}
+
 static_checks() {
-  need terraform tflint checkov helm yq kubeconform actionlint shellcheck
+  need terraform tflint checkov helm yq jq kubeconform kyverno actionlint shellcheck
   run "terraform fmt" terraform fmt -check -recursive terraform
   run "terraform validate" terraform_validate
   run "tflint" tflint_all
   run "checkov" checkov --config-file .checkov.yaml --quiet --compact
   run "helm lint" helm_lint
   run "kubeconform (kind + aws, rendered as Argo CD would)" kubeconform_envs
+  run "kyverno test (admission policies)" policy_tests
   run "actionlint" actionlint
   run "shellcheck" shellcheck -x scripts/*.sh scripts/ci/*.sh
+  run "shellcheck (in-cluster scripts)" shellcheck -s sh gitops/platform/vault-config/files/configure.sh
 }
 
 case "$MODE" in

@@ -1,0 +1,51 @@
+# Kyverno admission policies for FinCore. Every policy is enforced (Deny) and
+# fails closed in namespaces labelled with enforcedNamespaceLabel; see
+# docs/compliance-mapping.md for the control each one illustrates.
+
+# -- Namespaces carrying this label are enforced (fincore, fincore-cde).
+enforcedNamespaceLabel:
+  fincore.io/policy: enforced
+
+# -- Pod controllers whose templates are checked at admission too, so a bad
+# Deployment is rejected outright instead of failing pod by pod.
+autogenControllers: [deployments, statefulsets, daemonsets, jobs, cronjobs]
+
+images:
+  # -- Our registry (kind: the local registry; AWS: <account>.dkr.ecr.<region>.amazonaws.com).
+  registry: fincore-registry:5000
+  # -- Repository prefix of FinCore images inside the registry.
+  repositoryPrefix: fincore/
+  # -- Third-party images allowed in enforced namespaces, by exact digest-pinned reference.
+  approvedThirdParty:
+    # Vault Agent sidecar (injected into the ledger) and its init container.
+    - hashicorp/vault:2.2.1@sha256:962a92876e168d68eaaa24b0b8b49bbce1cb63024060a67bba95cd158a366fc2
+    # PostgreSQL client for the database bootstrap job.
+    - postgres:17.11-alpine3.23@sha256:01ea903aa65deb58eb49d6e09d859ecff63a6bb7d61feca55f2abad71d08f72a
+    # k6 traffic generator (feeds the canary analysis).
+    - grafana/k6:2.3.0@sha256:2dd4756ec6e14e62778916e1eb850108e4b499304c02df56760fa0bdb0fba0b8
+
+# Signature and SBOM verification of FinCore images.
+signature:
+  # -- key: a cosign public key (kind; generated locally). keyless: Sigstore (Fulcio + Rekor), CI's GitHub OIDC identity (AWS).
+  mode: key
+  key:
+    # The public key lives in a ConfigMap created by scripts/kind-up.sh; it is not secret.
+    configMap: { namespace: kyverno, name: fincore-cosign, key: cosign.pub }
+  keyless:
+    issuer: https://token.actions.githubusercontent.com
+    # Only the release workflow on main of this repository may sign.
+    subjectRegExp: '^https://github\.com/minhhieu21193/fincore/\.github/workflows/release\.yml@refs/heads/main$'
+    rekorURL: https://rekor.sigstore.dev
+  # -- In-toto predicate type of the SBOM attestation (cosign attest --type spdxjson).
+  sbomPredicateType: https://spdx.dev/Document
+
+# Cardholder-data zone.
+cde:
+  namespace: fincore-cde
+  nodeRoleLabel: fincore.io/node-role
+  nodeRole: cde
+  taintKey: fincore.io/zone
+  taintValue: cde
+  # -- Namespaces whose DaemonSets legitimately run on every node (networking,
+  # metrics); they may tolerate the CDE taint. Everything else may not.
+  daemonNamespaces: [kube-system, monitoring]

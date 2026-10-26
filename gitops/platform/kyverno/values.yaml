@@ -1,0 +1,21 @@
+# Kyverno: admission control for FinCore namespaces (policies/ chart). The
+# admission controller verifies image signatures/SBOMs against the registry and
+# enforces the ValidatingPolicies; the reports controller keeps PolicyReports
+# (background scans) as continuous evidence.
+admissionController:
+  replicas: 1
+  container:
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 384Mi }
+backgroundController:
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { memory: 192Mi }
+reportsController:
+  resources:
+    requests: { cpu: 20m, memory: 64Mi }
+    limits: { memory: 192Mi }
+# Cleanup policies are not used.
+cleanupController:
+  enabled: false

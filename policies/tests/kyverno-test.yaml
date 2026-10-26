@@ -1,0 +1,46 @@
+# kyverno test for the admission policies (run by scripts/check.sh, which renders
+# the chart into policies.yaml next to this file). Image signature verification
+# needs a registry and is proven live by scripts/demo-policies.sh instead.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: fincore-policies
+policies:
+  - policies.yaml
+resources:
+  - resources.yaml
+variables: values.yaml
+results:
+  - { isValidatingPolicy: true, policy: require-non-root, kind: Pod, result: fail,
+      resources: [root-uid, root-container-override, no-run-as-non-root] }
+  - { isValidatingPolicy: true, policy: require-non-root, kind: Pod, result: pass,
+      resources: [compliant-cde-pod, compliant-app-pod] }
+  - { isValidatingPolicy: true, policy: require-non-root, kind: Deployment, result: fail,
+      resources: [root-deployment] }
+  - { isValidatingPolicy: true, policy: require-non-root, kind: Deployment, result: pass,
+      resources: [compliant-deployment] }
+
+  - { isValidatingPolicy: true, policy: require-read-only-root-fs, kind: Pod, result: fail,
+      resources: [writable-root-fs] }
+  - { isValidatingPolicy: true, policy: require-read-only-root-fs, kind: Pod, result: pass,
+      resources: [compliant-cde-pod, compliant-app-pod] }
+
+  - { isValidatingPolicy: true, policy: require-resources, kind: Pod, result: fail,
+      resources: [missing-memory-limit, missing-requests] }
+  - { isValidatingPolicy: true, policy: require-resources, kind: Pod, result: pass,
+      resources: [compliant-cde-pod, compliant-app-pod] }
+
+  - { isValidatingPolicy: true, policy: restrict-image-registries, kind: Pod, result: fail,
+      resources: [foreign-image, look-alike-registry, third-party-wrong-digest, foreign-init-container] }
+  - { isValidatingPolicy: true, policy: restrict-image-registries, kind: Pod, result: pass,
+      resources: [compliant-cde-pod, approved-third-party] }
+
+  - { isValidatingPolicy: true, policy: cde-pods-on-cde-nodes, kind: Pod, result: fail,
+      resources: [cde-pod-off-cde-nodes] }
+  - { isValidatingPolicy: true, policy: cde-pods-on-cde-nodes, kind: Pod, result: pass,
+      resources: [compliant-cde-pod] }
+
+  - { isValidatingPolicy: true, policy: no-cde-tolerations-outside-zone, kind: Pod, result: fail,
+      resources: [app-pod-tolerates-cde, blanket-toleration-elsewhere] }
+  - { isValidatingPolicy: true, policy: no-cde-tolerations-outside-zone, kind: Pod, result: pass,
+      resources: [compliant-app-pod] }

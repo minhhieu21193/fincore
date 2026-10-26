@@ -1,0 +1,59 @@
+{{- $c := .Values.cde -}}
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: cde-pods-on-cde-nodes
+  annotations:
+    policies.kyverno.io/title: Cardholder-data-zone pods run on CDE nodes
+    policies.kyverno.io/description: >-
+      Pods in {{ $c.namespace }} must select the dedicated CDE nodes, so card-data
+      workloads never share a node with anything outside the zone.
+spec:
+  {{- include "policies.common" . | nindent 2 }}
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: {{ $c.namespace }}
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  validations:
+    - expression: >-
+        object.spec.?nodeSelector[?{{ squote $c.nodeRoleLabel }}].orValue('') == {{ squote $c.nodeRole }}
+      message: >-
+        pods in the cardholder-data zone must run on CDE nodes
+        (nodeSelector {{ $c.nodeRoleLabel }}={{ $c.nodeRole }})
+---
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: no-cde-tolerations-outside-zone
+  annotations:
+    policies.kyverno.io/title: Nothing else may schedule onto CDE nodes
+    policies.kyverno.io/description: >-
+      Outside {{ $c.namespace }}, pods may not tolerate the {{ $c.taintKey }} taint,
+      neither explicitly nor with a blanket toleration. Node-level DaemonSets in
+      {{ join ", " $c.daemonNamespaces }} are the documented exception.
+spec:
+  {{- include "policies.common" . | nindent 2 }}
+  matchConstraints:
+    namespaceSelector:
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: NotIn
+          values: {{ toJson (concat (list $c.namespace "kyverno") $c.daemonNamespaces) }}
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  validations:
+    - expression: >-
+        !object.spec.?tolerations.orValue([]).exists(t,
+          t.?key.orValue('') == {{ squote $c.taintKey }} ||
+          (t.?key.orValue('') == '' && t.?operator.orValue('Equal') == 'Exists'))
+      message: >-
+        only cardholder-data-zone workloads ({{ $c.namespace }}) may tolerate the
+        {{ $c.taintKey }} taint, explicitly or with a blanket toleration

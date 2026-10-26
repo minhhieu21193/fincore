@@ -1,0 +1,29 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    policies.kyverno.io/title: Images only from our registry
+    policies.kyverno.io/description: >-
+      FinCore images must come from our registry ({{ .Values.images.registry }}/{{ .Values.images.repositoryPrefix }}*),
+      where they are signed and SBOM-attested. Third-party images are allowed only
+      as explicitly approved, digest-pinned references.
+spec:
+  {{- include "policies.common" . | nindent 2 }}
+  {{- include "policies.matchEnforcedPods" . | nindent 2 }}
+  variables:
+    {{- include "policies.containersVariable" . | nindent 4 }}
+    - name: prefix
+      expression: {{ printf "%s/%s" .Values.images.registry .Values.images.repositoryPrefix | squote | quote }}
+    - name: approved
+      expression: {{ printf "[%s]" (include "policies.quotedList" .Values.images.approvedThirdParty) | quote }}
+    - name: offenders
+      expression: >-
+        variables.containers.filter(c,
+          !c.image.startsWith(variables.prefix) && !(c.image in variables.approved)
+        ).map(c, c.image)
+  validations:
+    - expression: size(variables.offenders) == 0
+      messageExpression: >-
+        'images must come from ' + variables.prefix + '* or the approved third-party list; rejected: ' +
+        variables.offenders.join(', ')

@@ -1,0 +1,620 @@
+# One compliant workload per zone and one per violation (see kyverno-test.yaml).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: compliant-cde-pod
+  namespace: fincore-cde
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  nodeSelector:
+    fincore.io/node-role: cde
+  tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: compliant-app-pod
+  namespace: fincore
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: root-uid
+  namespace: fincore-cde
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 0
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  nodeSelector:
+    fincore.io/node-role: cde
+  tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: root-container-override
+  namespace: fincore-cde
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+      runAsNonRoot: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  nodeSelector:
+    fincore.io/node-role: cde
+  tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: no-run-as-non-root
+  namespace: fincore-cde
+spec:
+  securityContext:
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  nodeSelector:
+    fincore.io/node-role: cde
+  tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: writable-root-fs
+  namespace: fincore-cde
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: false
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  nodeSelector:
+    fincore.io/node-role: cde
+  tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: missing-memory-limit
+  namespace: fincore-cde
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+  nodeSelector:
+    fincore.io/node-role: cde
+  tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: missing-requests
+  namespace: fincore-cde
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      limits:
+        memory: 128Mi
+  nodeSelector:
+    fincore.io/node-role: cde
+  tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: foreign-image
+  namespace: fincore-cde
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: docker.io/library/nginx:1.29
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  nodeSelector:
+    fincore.io/node-role: cde
+  tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: look-alike-registry
+  namespace: fincore-cde
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/evil/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  nodeSelector:
+    fincore.io/node-role: cde
+  tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: approved-third-party
+  namespace: fincore
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: hashicorp/vault:2.2.1@sha256:962a92876e168d68eaaa24b0b8b49bbce1cb63024060a67bba95cd158a366fc2
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: third-party-wrong-digest
+  namespace: fincore
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: hashicorp/vault:2.2.1
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: foreign-init-container
+  namespace: fincore-cde
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  nodeSelector:
+    fincore.io/node-role: cde
+  tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+  initContainers:
+  - name: init
+    image: busybox:1.37
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cde-pod-off-cde-nodes
+  namespace: fincore-cde
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: app-pod-tolerates-cde
+  namespace: fincore
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: blanket-toleration-elsewhere
+  namespace: playground
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  tolerations:
+  - operator: Exists
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: daemon-in-kube-system
+  namespace: kube-system
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+  - name: app
+    image: fincore-registry:5000/fincore/ledger:0.1.0
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+  tolerations:
+  - operator: Exists
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: root-deployment
+  namespace: fincore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: x
+  template:
+    metadata:
+      labels:
+        app: x
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 0
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: app
+        image: fincore-registry:5000/fincore/ledger:0.1.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compliant-deployment
+  namespace: fincore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: x
+  template:
+    metadata:
+      labels:
+        app: x
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: app
+        image: fincore-registry:5000/fincore/ledger:0.1.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            memory: 128Mi
