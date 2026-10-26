@@ -1,3 +1,4 @@
+{{- if .Values.dbInit.enabled }}
 {{- $db := .Values.database -}}
 apiVersion: v1
 kind: ConfigMap
@@ -80,3 +81,4 @@ spec:
           configMap: { name: db-init }
         - name: tmp
           emptyDir: {}
+{{- end }}

@@ -15,6 +15,7 @@ components:
   cluster-issuers: { enabled: true }
   local-infra: { enabled: true }
   fincore-base: { enabled: true }
+  cde-base: { enabled: true }
   ledger: { enabled: true }
   webhook-sink: { enabled: true }
   payments-api: { enabled: true }

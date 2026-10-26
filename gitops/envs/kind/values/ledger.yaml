@@ -1,7 +1,7 @@
 image:
-  repository: fincore/ledger
+  repository: fincore-registry:5000/fincore/ledger
   tag: 0.1.0
-  pullPolicy: Never
+  pullPolicy: IfNotPresent
 env:
   DB_HOST: postgres.fincore-data.svc.cluster.local
   DB_SSLMODE: disable

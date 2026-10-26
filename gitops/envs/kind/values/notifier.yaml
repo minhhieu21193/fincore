@@ -1,7 +1,7 @@
 image:
-  repository: fincore/notifier
+  repository: fincore-registry:5000/fincore/notifier
   tag: 0.1.0
-  pullPolicy: Never
+  pullPolicy: IfNotPresent
 env:
   SQS_ENDPOINT: http://elasticmq.fincore-data.svc.cluster.local:9324
   SQS_QUEUE_URL: http://elasticmq.fincore-data.svc.cluster.local:9324/000000000000/fincore-payment-events

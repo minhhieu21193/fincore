@@ -12,7 +12,7 @@ cleanup() { for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null || true; done; }
 trap cleanup EXIT
 
 forward() { # svc local-port
-  kubectl -n fincore port-forward "svc/$1" "$2:8080" >/dev/null 2>&1 &
+  kubectl -n "$(ns_of "$1")" port-forward "svc/$1" "$2:8080" >/dev/null 2>&1 &
   PIDS+=($!)
 }
 forward payments-api 18080

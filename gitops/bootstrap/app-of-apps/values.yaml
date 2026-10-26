@@ -108,6 +108,7 @@ components:
     plainManifests: true
 
   # ---------------------------------------------------------------- wave 3+: FinCore
+  # Namespace "fincore": services outside the cardholder-data zone.
   fincore-base:
     enabled: false
     wave: 5
@@ -116,11 +117,26 @@ components:
     namespaceLabels:
       pod-security.kubernetes.io/enforce: restricted
       pod-security.kubernetes.io/warn: restricted
+      fincore.io/zone: app
+      fincore.io/policy: enforced
+
+  # Namespace "fincore-cde": the cardholder-data zone (payments-api, ledger, db-init).
+  cde-base:
+    enabled: false
+    wave: 5
+    namespace: fincore-cde
+    path: apps/fincore-base
+    valueFiles: [apps/cde-base/values.yaml]
+    namespaceLabels:
+      pod-security.kubernetes.io/enforce: restricted
+      pod-security.kubernetes.io/warn: restricted
+      fincore.io/zone: cde
+      fincore.io/policy: enforced
 
   ledger:
     enabled: false
     wave: 10
-    namespace: fincore
+    namespace: fincore-cde
     path: charts/fincore-service
     valueFiles: [apps/ledger/values.yaml]
 
@@ -134,7 +150,7 @@ components:
   payments-api:
     enabled: false
     wave: 15
-    namespace: fincore
+    namespace: fincore-cde
     path: charts/fincore-service
     valueFiles: [apps/payments-api/values.yaml]
 

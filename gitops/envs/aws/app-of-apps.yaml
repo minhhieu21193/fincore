@@ -47,7 +47,8 @@ components:
         email: {{ .Values.cluster.acmeEmail }}
         region: {{ .Values.cluster.region }}
         hostedZoneID: {{ .Values.cluster.hostedZoneId }}
-  fincore-base:
+  fincore-base: { enabled: true }
+  cde-base:
     enabled: true
     clusterValues: |
       database:

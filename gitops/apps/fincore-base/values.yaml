@@ -1,3 +1,8 @@
+# Per-namespace foundation for FinCore: ExternalSecrets, the database
+# bootstrap job and (later) the namespace's NetworkPolicies. Rendered twice:
+#   fincore-base -> namespace "fincore"      (this file)
+#   cde-base     -> namespace "fincore-cde"  (+ gitops/apps/cde-base/values.yaml)
+
 database:
   host: postgres.fincore-data.svc.cluster.local
   port: 5432
@@ -8,12 +13,14 @@ database:
   # -- Per-service roles and databases created by the db-init job.
   services: [payments, ledger]
 
-# Remote secret names (identical on AWS Secrets Manager and the kind emulator).
 secrets:
   refreshInterval: 1h
-  paymentsDb: fincore-payments-db
-  ledgerDb: fincore-ledger-db
-  webhookSigning: fincore-webhook-signing
+  # -- Kubernetes Secret name -> remote secret (identical names on AWS Secrets
+  # Manager and the kind emulator) and the properties to copy.
+  items:
+    webhook-signing: { remote: fincore-webhook-signing, keys: [secret] }
 
+# -- Creates the per-service roles and databases (cardholder-data zone only).
 dbInit:
+  enabled: false
   image: postgres:17.11-alpine3.23@sha256:01ea903aa65deb58eb49d6e09d859ecff63a6bb7d61feca55f2abad71d08f72a

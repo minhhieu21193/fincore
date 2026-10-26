@@ -1,0 +1,9 @@
+# Cardholder-data zone (namespace fincore-cde): database bootstrap and the
+# credentials of the services inside the zone.
+dbInit:
+  enabled: true
+secrets:
+  items:
+    payments-db: { remote: fincore-payments-db, keys: [password] }
+    ledger-db: { remote: fincore-ledger-db, keys: [password] }
+    webhook-signing: null   # not needed inside the zone

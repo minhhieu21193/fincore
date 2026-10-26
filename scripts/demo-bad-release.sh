@@ -14,9 +14,9 @@ set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 need kubectl jq git yq
 
-ro() { kubectl -n fincore get rollout payments-api -o json; }
+ro() { kubectl -n $NS_CDE get rollout payments-api -o json; }
 [[ "$(ro | jq -r .status.phase)" == Healthy ]] || die "payments-api rollout must be Healthy before the demo"
-kubectl -n fincore get deploy traffic-generator >/dev/null || die "traffic-generator must be running (it feeds the analysis)"
+kubectl -n $NS_APP get deploy traffic-generator >/dev/null || die "traffic-generator must be running (it feeds the analysis)"
 
 STABLE_TAG="$(kind_tag payments-api)"
 STABLE_HASH="$(ro | jq -r .status.stableRS)"
@@ -29,7 +29,7 @@ T0=$SECONDS
 BAD_COMMIT="$(git -C "$ROOT" rev-parse HEAD)"
 
 log "waiting for Argo CD to sync and the canary to start"
-wait_for "canary ReplicaSet" 180 bash -c "[[ \$(kubectl -n fincore get rollout payments-api -o jsonpath='{.status.currentPodHash}') != '$STABLE_HASH' ]]"
+wait_for "canary ReplicaSet" 180 bash -c "[[ \$(kubectl -n $NS_CDE get rollout payments-api -o jsonpath='{.status.currentPodHash}') != '$STABLE_HASH' ]]"
 CANARY_HASH="$(ro | jq -r .status.currentPodHash)"
 ok "canary started after $(( SECONDS - T0 ))s (hash $CANARY_HASH)"
 
@@ -52,7 +52,7 @@ done
 ok "Rollouts ABORTED the canary automatically ${T_ABORT}s after the release commit"
 echo "   message: $(ro | jq -r .status.message)"
 
-AR="$(kubectl -n fincore get analysisrun -l rollouts-pod-template-hash="$CANARY_HASH" -o json | jq -r '.items | sort_by(.metadata.creationTimestamp) | last')"
+AR="$(kubectl -n $NS_CDE get analysisrun -l rollouts-pod-template-hash="$CANARY_HASH" -o json | jq -r '.items | sort_by(.metadata.creationTimestamp) | last')"
 echo "   AnalysisRun $(jq -r .metadata.name <<<"$AR"): $(jq -r .status.phase <<<"$AR")"
 jq -r '.status.metricResults[] | "     \(.name): \(.phase) — measurements: \([.measurements[] | "\(.phase):\(.value)"] | join(", "))"' <<<"$AR"
 
@@ -61,7 +61,7 @@ EVIDENCE="$(jq '[.status.metricResults[] | .measurements[] | select(.phase == "F
 [[ "$EVIDENCE" -ge 1 ]] || die "analysis failed without data; this is not a valid detection"
 ok "abort backed by $EVIDENCE failed measurement(s) with data"
 
-wait_for "canary scaled to zero" 120 bash -c "[[ \$(kubectl -n fincore get rs -l rollouts-pod-template-hash=$CANARY_HASH -o jsonpath='{.items[0].status.replicas}') == 0 ]]"
+wait_for "canary scaled to zero" 120 bash -c "[[ \$(kubectl -n $NS_CDE get rs -l rollouts-pod-template-hash=$CANARY_HASH -o jsonpath='{.items[0].status.replicas}') == 0 ]]"
 STABLE_NOW="$(ro | jq -r .status.stableRS)"
 [[ "$STABLE_NOW" == "$STABLE_HASH" ]] || die "stable ReplicaSet changed ($STABLE_NOW)"
 ok "canary scaled to 0; 100% of traffic on stable $STABLE_HASH (payments-api:$STABLE_TAG)"
@@ -69,11 +69,11 @@ ok "canary scaled to 0; 100% of traffic on stable $STABLE_HASH (payments-api:$ST
 log "restoring git as the source of truth: reverting the bad release commit"
 git -C "$ROOT" revert --no-edit "$BAD_COMMIT" >/dev/null
 kubectl -n argocd annotate application payments-api argocd.argoproj.io/refresh=normal --overwrite >/dev/null
-wait_for "rollout Healthy on the stable version" 300 bash -c "s=\$(kubectl -n fincore get rollout payments-api -o json); [[ \$(jq -r .status.phase <<<\"\$s\") == Healthy && \$(jq -r .status.currentPodHash <<<\"\$s\") == '$STABLE_HASH' ]]"
+wait_for "rollout Healthy on the stable version" 300 bash -c "s=\$(kubectl -n $NS_CDE get rollout payments-api -o json); [[ \$(jq -r .status.phase <<<\"\$s\") == Healthy && \$(jq -r .status.currentPodHash <<<\"\$s\") == '$STABLE_HASH' ]]"
 ok "reverted ($(git -C "$ROOT" rev-parse --short HEAD)); rollout Healthy on payments-api:$STABLE_TAG"
 
 echo
 ok "DEMO PASSED: bad build detected by canary analysis and rolled back automatically in ${T_ABORT}s"
 if command -v kubectl-argo-rollouts >/dev/null; then
-  kubectl argo rollouts get rollout payments-api -n fincore --no-color | head -30
+  kubectl argo rollouts get rollout payments-api -n $NS_CDE --no-color | head -30
 fi
