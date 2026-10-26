@@ -52,6 +52,15 @@ server:
   resources:
     requests: { cpu: 50m, memory: 128Mi }
     limits: { memory: 256Mi }
+  # HTTP health check instead of the default exec of `vault status` (which
+  # starts a Vault CLI process every 5s per pod). Same meaning: sealed (503) or
+  # uninitialised (501) is not ready; a standby is ready.
+  readinessProbe:
+    enabled: true
+    path: /v1/sys/health?standbyok=true&perfstandbyok=true
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
   statefulSet:
     securityContext:
       pod:
