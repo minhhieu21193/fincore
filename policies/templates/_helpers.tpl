@@ -14,9 +14,10 @@ matchConstraints:
 {{- define "policies.common" -}}
 validationActions: [Deny]
 failurePolicy: Fail
+# Admission only (no background scans; see gitops/platform/kyverno/values.yaml).
 evaluation:
   background:
-    enabled: true
+    enabled: false
 autogen:
   podControllers:
     controllers: {{ toJson .Values.autogenControllers }}
