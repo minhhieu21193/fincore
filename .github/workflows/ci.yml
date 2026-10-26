@@ -77,6 +77,10 @@ jobs:
           tar -xzf /tmp/actionlint.tgz -C "$HOME/bin" actionlint
           shellcheck --version | head -2   # preinstalled on GitHub-hosted Ubuntu runners
           curl -sSfL -o "$HOME/bin/yq" https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_amd64 && chmod +x "$HOME/bin/yq"
+          # Kyverno CLI for the admission-policy tests, checksum-verified.
+          curl -sSfL -o /tmp/kyverno.tgz https://github.com/kyverno/kyverno/releases/download/v1.19.2/kyverno-cli_v1.19.2_linux_x86_64.tar.gz
+          echo "357eaf1df8bc24ddd5a73979fadeaae6a032e8710f11af264229756e4956bf4a  /tmp/kyverno.tgz" | sha256sum -c -
+          tar -xzf /tmp/kyverno.tgz -C "$HOME/bin" kyverno
       - name: Cache Helm charts (pinned versions, keyed on the catalogue)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -119,3 +123,19 @@ jobs:
         run: scripts/ci/install-trivy.sh "$TRIVY_VERSION"
       - name: Trivy scan (fail on fixable HIGH/CRITICAL)
         run: trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --no-progress fincore/${{ matrix.image }}:ci
+      # The same SBOM the release signs and attaches (Syft, SPDX JSON).
+      - uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        id: syft
+        with:
+          syft-version: v1.55.0
+      - name: SBOM (SPDX)
+        env:
+          SYFT: ${{ steps.syft.outputs.cmd }}
+        run: |
+          "$SYFT" "docker:fincore/${{ matrix.image }}:ci" -o "spdx-json=sbom-${{ matrix.image }}.spdx.json" -q
+          echo "SBOM for ${{ matrix.image }}: $(jq '.packages | length' "sbom-${{ matrix.image }}.spdx.json") packages" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-${{ matrix.image }}
+          path: sbom-${{ matrix.image }}.spdx.json
+          retention-days: 30
