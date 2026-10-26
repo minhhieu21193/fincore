@@ -58,7 +58,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: vault-config
+            name: vault-configurer
             items:
               - { key: configure.sh, path: configure.sh }
               - { key: sql.create.sql, path: sql/create.sql }
