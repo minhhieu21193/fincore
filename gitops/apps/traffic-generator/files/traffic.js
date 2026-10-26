@@ -19,7 +19,10 @@ export const options = {
       timeUnit: '1s',
       duration: '24h',
       preAllocatedVUs: 20,
-      maxVUs: 100,
+      // Bounded concurrency, like a real client fleet: if the platform slows
+      // down, k6 drops iterations instead of piling up connections (with 100
+      // VUs a slow spell turned into a self-sustaining overload).
+      maxVUs: 30,
     },
   },
 };
