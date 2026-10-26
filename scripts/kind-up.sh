@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Create (or update) the local FinCore platform on kind:
-#   local PKI -> kind cluster (control plane, 3 workers in zones a/b/c, 2 tainted
-#   cardholder-data-zone workers) -> TLS registry -> signed images -> local
+#   local PKI -> kind cluster (control plane, 2 workers in zones a/b, 1 tainted
+#   cardholder-data-zone worker in zone c) -> TLS registry -> signed images -> local
 #   "secrets" -> git server -> Argo CD -> root app-of-apps -> Vault init -> Healthy.
 # Safe to re-run. Never talks to AWS.
 set -euo pipefail
@@ -11,6 +11,9 @@ need kind kubectl helm docker yq git openssl jq uuidgen
 
 NODE_IMAGE="kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed"
 ARGOCD_CHART_VERSION="10.11.1"
+# Worker layout (zones of ap-southeast-1): general-purpose and cardholder-data zone.
+GENERAL_ZONES=(a b)
+CDE_ZONES=(c)
 mkdir -p "$ROOT/.kube"
 
 # ---------------------------------------------------------------- local PKI (generated once, never committed)
@@ -54,7 +57,9 @@ if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
     echo "nodes:"
     echo "  - role: control-plane"
     echo "$mount"
-    for zone in a b c; do
+    # Kept small for a laptop (one Docker VM): two general-purpose workers and
+    # one cardholder-data-zone worker, in three zones.
+    for zone in "${GENERAL_ZONES[@]}"; do
       echo "  - role: worker"
       echo "    labels:"
       echo "      topology.kubernetes.io/zone: ap-southeast-1$zone"
@@ -62,8 +67,8 @@ if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
       echo "      fincore.io/node-role: workload"
       echo "$mount"
     done
-    # Cardholder-data zone: dedicated, tainted nodes (Karpenter NodePool "cde" on AWS).
-    for zone in a b; do
+    # Cardholder-data zone: a dedicated, tainted node (Karpenter NodePool "cde" on AWS).
+    for zone in "${CDE_ZONES[@]}"; do
       echo "  - role: worker"
       echo "    labels:"
       echo "      topology.kubernetes.io/zone: ap-southeast-1$zone"

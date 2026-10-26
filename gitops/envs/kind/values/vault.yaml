@@ -11,3 +11,16 @@ server:
     limits: { memory: 192Mi }
   dataStorage:
     size: 1Gi
+  # Two general-purpose workers on kind: still three Raft voters, spread where
+  # possible. On AWS the anti-affinity stays required (one node per replica).
+  affinity: |
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: {{ template "vault.name" . }}
+                app.kubernetes.io/instance: "{{ .Release.Name }}"
+                component: server
+            topologyKey: kubernetes.io/hostname
