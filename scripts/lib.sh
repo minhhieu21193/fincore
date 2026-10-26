@@ -42,6 +42,9 @@ ok()   { printf '\033[1;32m ✔\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m !\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m ✘\033[0m %s\n' "$*" >&2; exit 1; }
 
+# indent: prefix every line of stdin, for nested script output.
+indent() { local l; while IFS= read -r l; do printf '   %s\n' "$l"; done; }
+
 need() {
   local t
   for t in "$@"; do command -v "$t" >/dev/null 2>&1 || die "missing tool: $t (see README prerequisites)"; done
