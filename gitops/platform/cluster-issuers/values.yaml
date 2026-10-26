@@ -1,0 +1,8 @@
+# -- selfsigned | letsencrypt
+mode: selfsigned
+letsencrypt:
+  email: ""
+  region: ap-southeast-1
+  hostedZoneID: ""
+  # -- Use the staging endpoint unless you need browser-trusted certificates.
+  staging: true

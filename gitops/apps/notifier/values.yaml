@@ -1,0 +1,17 @@
+nameOverride: notifier
+replicas: 2
+env:
+  DELIVERY_ATTEMPTS: "3"
+  CONCURRENCY: "8"
+  # merchant_id -> webhook URL; unknown merchants use DEFAULT_WEBHOOK_URL.
+  MERCHANT_WEBHOOKS: "{}"
+  DEFAULT_WEBHOOK_URL: http://webhook-sink.fincore.svc.cluster.local:8080/webhooks
+secretEnv:
+  WEBHOOK_SIGNING_SECRET: { secret: webhook-signing, key: secret }
+resources:
+  requests: { cpu: 25m, memory: 48Mi }
+  limits: { memory: 128Mi }
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6

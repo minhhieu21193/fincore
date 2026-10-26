@@ -1,0 +1,12 @@
+# domainFilters / txtOwnerId injected at bootstrap. Credentials via EKS Pod Identity.
+provider:
+  name: aws
+policy: upsert-only   # never deletes records it did not create
+registry: txt
+sources: [ingress, service]
+serviceAccount:
+  create: true
+  name: external-dns
+resources:
+  requests: { cpu: 10m, memory: 48Mi }
+  limits: { memory: 128Mi }

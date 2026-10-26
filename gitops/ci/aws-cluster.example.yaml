@@ -1,0 +1,15 @@
+# FAKE cluster facts, used only by scripts/render.sh to validate the AWS
+# environment offline. Real values are injected by terraform/envs/demo/argocd.tf.
+cluster:
+  name: fincore-demo
+  region: ap-southeast-1
+  vpcId: vpc-0123456789abcdef0
+  domain: demo.example.com
+  hostedZoneId: Z0000000000000000000
+  acmeEmail: ops@example.com
+  karpenterNodeRole: fincore-demo-karpenter-node
+  karpenterInterruptionQueue: Karpenter-fincore-demo
+  ecrRegistry: 000000000000.dkr.ecr.ap-southeast-1.amazonaws.com
+  dbHost: fincore-demo.cluster-xxxxxxxxxxxx.ap-southeast-1.rds.amazonaws.com
+  dbAdminSecretName: arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:rds!cluster-00000000-0000-0000-0000-000000000000-AbCdEf
+  paymentEventsQueueUrl: https://sqs.ap-southeast-1.amazonaws.com/000000000000/fincore-demo-payment-events

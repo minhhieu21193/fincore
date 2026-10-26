@@ -1,0 +1,7 @@
+# -- aws | kubernetes
+provider: kubernetes
+aws:
+  region: ap-southeast-1
+kubernetes:
+  # -- Namespace holding the locally generated "secrets" (created by scripts/kind-up.sh).
+  namespace: secrets-emulator

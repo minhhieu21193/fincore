@@ -1,0 +1,9 @@
+# image.tag is bumped by .github/workflows/release.yml after a successful push to ECR.
+image:
+  tag: 0.1.0
+nodeSelector:
+  fincore.io/node-role: workload
+topologySpread:
+  zoneWhenUnsatisfiable: DoNotSchedule
+env:
+  DB_SSLMODE: require

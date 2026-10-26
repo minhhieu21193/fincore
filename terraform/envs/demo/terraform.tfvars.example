@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (gitignored) and fill in. Nothing here is applied
+# automatically: the owner runs `terraform apply` on a dedicated AWS account.
+aws_account_id = "000000000000"        # the dedicated demo account
+domain         = "demo.example.com"    # an existing public hosted zone in that account
+acme_email     = "ops@example.com"
+
+eks_public_access_cidrs = ["203.0.113.10/32"] # your workstation IP
+
+eks_addon_versions = {
+  "vpc-cni"                = "v1.23.1-eksbuild.1"
+  "coredns"                = "v1.14.3-eksbuild.16"
+  "kube-proxy"             = "v1.36.0-eksbuild.21"
+  "eks-pod-identity-agent" = "REPLACE_ME" # aws eks describe-addon-versions --addon-name eks-pod-identity-agent --kubernetes-version 1.36
+}
+
+budget_alert_emails = ["ops@example.com"]

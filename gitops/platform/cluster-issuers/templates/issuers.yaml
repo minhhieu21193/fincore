@@ -1,0 +1,50 @@
+{{- if eq .Values.mode "letsencrypt" }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: fincore
+spec:
+  acme:
+    server: {{ ternary "https://acme-staging-v02.api.letsencrypt.org/directory" "https://acme-v02.api.letsencrypt.org/directory" .Values.letsencrypt.staging }}
+    email: {{ required "letsencrypt.email is required" .Values.letsencrypt.email }}
+    privateKeySecretRef:
+      name: fincore-acme-account
+    solvers:
+      - dns01:
+          route53:
+            region: {{ .Values.letsencrypt.region }}
+            hostedZoneID: {{ required "letsencrypt.hostedZoneID is required" .Values.letsencrypt.hostedZoneID }}
+{{- else }}
+# Local CA: a self-signed root that issues everything else.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: fincore-selfsigned-root
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: fincore-local-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: fincore-local-ca
+  secretName: fincore-local-ca
+  duration: 8760h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    kind: ClusterIssuer
+    name: fincore-selfsigned-root
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: fincore
+spec:
+  ca:
+    secretName: fincore-local-ca
+{{- end }}

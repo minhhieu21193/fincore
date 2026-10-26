@@ -1,0 +1,88 @@
+# AWS (EKS). Account-specific facts arrive in .Values.cluster from Terraform
+# (terraform/envs/demo/argocd.tf) and are rendered through clusterValues —
+# none of them are committed.
+env: aws
+repoURL: https://github.com/minhhieu21193/fincore.git
+targetRevision: main
+
+components:
+  karpenter:
+    enabled: true
+    clusterValues: |
+      settings:
+        clusterName: {{ .Values.cluster.name }}
+        interruptionQueue: {{ .Values.cluster.karpenterInterruptionQueue }}
+  karpenter-nodepools:
+    enabled: true
+    clusterValues: |
+      clusterName: {{ .Values.cluster.name }}
+      nodeRole: {{ .Values.cluster.karpenterNodeRole }}
+  argo-rollouts: { enabled: true }
+  metrics-server: { enabled: true }
+  cert-manager: { enabled: true }
+  external-secrets: { enabled: true }
+  kube-prometheus-stack: { enabled: true }
+  aws-load-balancer-controller:
+    enabled: true
+    clusterValues: |
+      clusterName: {{ .Values.cluster.name }}
+      region: {{ .Values.cluster.region }}
+      vpcId: {{ .Values.cluster.vpcId }}
+  external-dns:
+    enabled: true
+    clusterValues: |
+      domainFilters: [{{ .Values.cluster.domain | quote }}]
+      txtOwnerId: {{ .Values.cluster.name }}
+  secret-stores:
+    enabled: true
+    clusterValues: |
+      provider: aws
+      aws:
+        region: {{ .Values.cluster.region }}
+  cluster-issuers:
+    enabled: true
+    clusterValues: |
+      mode: letsencrypt
+      letsencrypt:
+        email: {{ .Values.cluster.acmeEmail }}
+        region: {{ .Values.cluster.region }}
+        hostedZoneID: {{ .Values.cluster.hostedZoneId }}
+  fincore-base:
+    enabled: true
+    clusterValues: |
+      database:
+        host: {{ .Values.cluster.dbHost }}
+        sslmode: require
+        adminSecretKey: {{ .Values.cluster.dbAdminSecretName }}
+  ledger:
+    enabled: true
+    clusterValues: |
+      image:
+        repository: {{ .Values.cluster.ecrRegistry }}/fincore/ledger
+      env:
+        DB_HOST: {{ .Values.cluster.dbHost }}
+        AWS_REGION: {{ .Values.cluster.region }}
+  payments-api:
+    enabled: true
+    clusterValues: |
+      image:
+        repository: {{ .Values.cluster.ecrRegistry }}/fincore/payments-api
+      env:
+        DB_HOST: {{ .Values.cluster.dbHost }}
+        SQS_QUEUE_URL: {{ .Values.cluster.paymentEventsQueueUrl }}
+        AWS_REGION: {{ .Values.cluster.region }}
+      ingress:
+        host: api.{{ .Values.cluster.domain }}
+  notifier:
+    enabled: true
+    clusterValues: |
+      image:
+        repository: {{ .Values.cluster.ecrRegistry }}/fincore/notifier
+      env:
+        SQS_QUEUE_URL: {{ .Values.cluster.paymentEventsQueueUrl }}
+        AWS_REGION: {{ .Values.cluster.region }}
+  webhook-sink:
+    enabled: true
+    clusterValues: |
+      image:
+        repository: {{ .Values.cluster.ecrRegistry }}/fincore/webhook-sink

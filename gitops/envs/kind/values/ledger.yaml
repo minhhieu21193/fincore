@@ -1,0 +1,7 @@
+image:
+  repository: fincore/ledger
+  tag: 0.1.0
+  pullPolicy: Never
+env:
+  DB_HOST: postgres.fincore-data.svc.cluster.local
+  DB_SSLMODE: disable

@@ -1,0 +1,17 @@
+# clusterName and nodeRole are injected at bootstrap from Terraform outputs.
+clusterName: ""
+nodeRole: ""
+# -- Pinned EKS-optimised AL2023 AMI release (github.com/awslabs/amazon-eks-ami/releases).
+amiAlias: al2023@v20261019
+spot:
+  weight: 100
+  cpuLimit: "64"
+onDemand:
+  weight: 10
+  cpuLimit: "32"
+disruption:
+  consolidationPolicy: WhenEmptyOrUnderutilized
+  consolidateAfter: 1m
+  expireAfter: 720h
+  # -- Never disrupt more than 10% of nodes at once.
+  budget: "10%"

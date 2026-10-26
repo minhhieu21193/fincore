@@ -1,0 +1,43 @@
+{{- range $pool := list (dict "name" "spot" "capacity" "spot" "cfg" .Values.spot) (dict "name" "on-demand" "capacity" "on-demand" "cfg" .Values.onDemand) }}
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: {{ $pool.name }}
+spec:
+  # Higher weight is tried first: Spot, then on-demand when Spot is unavailable.
+  weight: {{ $pool.cfg.weight }}
+  limits:
+    cpu: {{ $pool.cfg.cpuLimit | quote }}
+  disruption:
+    consolidationPolicy: {{ $.Values.disruption.consolidationPolicy }}
+    consolidateAfter: {{ $.Values.disruption.consolidateAfter }}
+    budgets:
+      - nodes: {{ $.Values.disruption.budget | quote }}
+  template:
+    metadata:
+      labels:
+        fincore.io/node-role: workload
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      expireAfter: {{ $.Values.disruption.expireAfter }}
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: [{{ $pool.capacity | quote }}]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["arm64", "amd64"]
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c", "m", "r"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["5"]
+        - key: karpenter.k8s.aws/instance-size
+          operator: NotIn
+          values: ["metal", "24xlarge", "32xlarge", "48xlarge"]
+{{- end }}

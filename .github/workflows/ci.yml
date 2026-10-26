@@ -1,0 +1,121 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TRIVY_VERSION: 0.76.1
+
+jobs:
+  go:
+    name: go test / lint
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17.11-alpine3.23@sha256:01ea903aa65deb58eb49d6e09d859ecff63a6bb7d61feca55f2abad71d08f72a
+        env:
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: go vet
+        run: go vet ./...
+      - name: go test (with PostgreSQL-backed invariant tests)
+        env:
+          TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/postgres?sslmode=disable
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+
+  static:
+    name: static checks (terraform, helm, kubeconform, actions, shell)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.0
+          terraform_wrapper: false
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: v0.65.0
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install pinned CLI tools
+        run: |
+          set -euo pipefail
+          pip install --quiet checkov==3.3.30
+          mkdir -p "$HOME/bin" && echo "$HOME/bin" >> "$GITHUB_PATH"
+          curl -sSfL -o /tmp/kubeconform.tgz https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz
+          tar -xzf /tmp/kubeconform.tgz -C "$HOME/bin" kubeconform
+          curl -sSfL -o /tmp/actionlint.tgz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          tar -xzf /tmp/actionlint.tgz -C "$HOME/bin" actionlint
+          shellcheck --version | head -2   # preinstalled on GitHub-hosted Ubuntu runners
+          curl -sSfL -o "$HOME/bin/yq" https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_amd64 && chmod +x "$HOME/bin/yq"
+      - name: Cache Helm charts (pinned versions, keyed on the catalogue)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tools/helm/charts
+          key: helm-charts-${{ hashFiles('gitops/bootstrap/app-of-apps/values.yaml') }}
+      - name: Run static checks
+        run: scripts/check.sh --static
+
+  images:
+    name: image build + Trivy (${{ matrix.image }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { image: payments-api, service: payments-api, cmd: payments-api }
+          - { image: ledger, service: ledger, cmd: ledger }
+          - { image: notifier, service: notifier, cmd: notifier }
+          - { image: webhook-sink, service: notifier, cmd: webhook-sink }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: build/Dockerfile
+          build-args: |
+            SERVICE=${{ matrix.service }}
+            CMD=${{ matrix.cmd }}
+            VERSION=${{ github.sha }}
+            COMMIT=${{ github.sha }}
+          tags: fincore/${{ matrix.image }}:ci
+          load: true
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - name: Install Trivy (pinned, checksum-verified)
+        run: scripts/ci/install-trivy.sh "$TRIVY_VERSION"
+      - name: Trivy scan (fail on fixable HIGH/CRITICAL)
+        run: trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --no-progress fincore/${{ matrix.image }}:ci

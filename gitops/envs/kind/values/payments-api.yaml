@@ -1,0 +1,14 @@
+# kind: images are built locally and loaded with `kind load` (scripts/build-images.sh).
+image:
+  repository: fincore/payments-api
+  tag: 0.1.0
+  pullPolicy: Never
+env:
+  DB_HOST: postgres.fincore-data.svc.cluster.local
+  DB_SSLMODE: disable
+  SQS_ENDPOINT: http://elasticmq.fincore-data.svc.cluster.local:9324
+  SQS_QUEUE_URL: http://elasticmq.fincore-data.svc.cluster.local:9324/000000000000/fincore-payment-events
+  # ElasticMQ ignores credentials; these are placeholders, not secrets.
+  AWS_ACCESS_KEY_ID: local
+  AWS_SECRET_ACCESS_KEY: local
+  AWS_REGION: ap-southeast-1

@@ -1,0 +1,52 @@
+==> stable: payments-api:0.1.0 (ReplicaSet hash 5f6868fbb4)
+==> releasing deliberately bad build payments-api:0.1.0-bad.1792953163
+ ✔ built fincore/payments-api:0.1.0-bad.1792953163 (fault_rate=0.5)
+ ✔ loaded fincore/payments-api:0.1.0-bad.1792953163 into kind/fincore
+ ✔ committed: deploy(kind): payments-api 0.1.0-bad.1792953163 (deliberately bad build: 0.5 of requests fail) (87ad9a7)
+==> waiting for Argo CD to sync and the canary to start
+ ✔ canary started after 17s (hash 84d4b6bdc8)
+==> watching the rollout (analysis: success rate >= 99%, p95 <= 300ms on canary pods only)
+   [ 17s] phase=Progressing step=0 analysis=- aborted=false
+   [ 22s] phase=Paused step=1 analysis=Running aborted=false
+   [109s] phase=Degraded step=0 analysis=- aborted=true
+ ✔ Rollouts ABORTED the canary automatically 109s after the release commit
+   message: RolloutAborted: Rollout aborted update to revision 4: Background analysis phase error/failed: Metric "success-rate" assessed Failed due to failed (2) > failureLimit (1)
+   AnalysisRun payments-api-84d4b6bdc8-4: Failed
+     latency-p95: Successful — measurements: Successful:[0.1453960611834082], Successful:[0.14409999999999998]
+     success-rate: Failed — measurements: Failed:[0.47170266118918014], Failed:[0.4491525423728814]
+ ✔ abort backed by 2 failed measurement(s) with data
+ ✔ canary scaled to 0; 100% of traffic on stable 5f6868fbb4 (payments-api:0.1.0)
+==> restoring git as the source of truth: reverting the bad release commit
+ ✔ reverted (16d82dc); rollout Healthy on payments-api:0.1.0
+
+ ✔ DEMO PASSED: bad build detected by canary analysis and rolled back automatically in 109s
+Name:            payments-api
+Namespace:       fincore
+Status:          ✔ Healthy
+Strategy:        Canary
+  Step:          6/6
+  SetWeight:     100
+  ActualWeight:  100
+Images:          fincore/payments-api:0.1.0 (stable)
+Replicas:
+  Desired:       3
+  Current:       3
+  Updated:       3
+  Ready:         3
+  Available:     3
+
+NAME                                      KIND         STATUS         AGE    INFO
+⟳ payments-api                            Rollout      ✔ Healthy      7m19s  
+├──# revision:5                                                              
+│  └──⧉ payments-api-5f6868fbb4           ReplicaSet   ✔ Healthy      7m19s  stable
+│     ├──□ payments-api-5f6868fbb4-s4hmm  Pod          ◌ Terminating  2m7s   ready:1/1
+│     ├──□ payments-api-5f6868fbb4-wnm2h  Pod          ✔ Running      2m4s   ready:1/1
+│     ├──□ payments-api-5f6868fbb4-kbhxx  Pod          ✔ Running      2m1s   ready:1/1
+│     └──□ payments-api-5f6868fbb4-x22st  Pod          ✔ Running      8s     ready:1/1
+├──# revision:4                                                              
+│  ├──⧉ payments-api-84d4b6bdc8           ReplicaSet   • ScaledDown   101s   
+│  │  └──□ payments-api-84d4b6bdc8-b86xx  Pod          ◌ Terminating  101s   ready:1/1
+│  └──α payments-api-84d4b6bdc8-4         AnalysisRun  ✖ Failed       98s    ✔ 2,✖ 2
+└──# revision:2                                                              
+   ├──⧉ payments-api-6c4cdbfdcb           ReplicaSet   • ScaledDown   5m52s  
+   └──α payments-api-6c4cdbfdcb-2         AnalysisRun  ✔ Successful   5m49s  ✔ 12

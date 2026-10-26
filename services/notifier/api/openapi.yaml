@@ -1,0 +1,65 @@
+openapi: 3.1.0
+info:
+  title: FinCore Webhooks
+  version: 1.0.0
+  description: |
+    The notifier consumes payment events from SQS and POSTs them to the
+    merchant's webhook URL. This document describes the **outgoing** webhook
+    (what merchants must implement) and the notifier's own probes.
+
+    Delivery is at-least-once: deduplicate on `FinCore-Event-Id`. Respond 2xx
+    within 5 s to acknowledge. 408, 429 and 5xx are retried with exponential
+    backoff (in-process, then via SQS redelivery); after 5 receives the event
+    is parked in the dead-letter queue. Other 4xx are not retried in-process.
+
+    Verify `FinCore-Signature: t=<unix>,v1=<hex>` where
+    `v1 = HMAC-SHA256(secret, "<t>.<raw body>")`, and reject timestamps older
+    than 5 minutes.
+paths:
+  /healthz:
+    get:
+      operationId: liveness
+      responses: { "200": { description: Alive. } }
+  /readyz:
+    get:
+      operationId: readiness
+      responses:
+        "200": { description: Ready. }
+        "503": { description: Shutting down. }
+webhooks:
+  paymentEvent:
+    post:
+      operationId: paymentEvent
+      summary: A payment reached a terminal state
+      parameters:
+        - { name: FinCore-Event-Id, in: header, required: true, schema: { type: string, format: uuid } }
+        - { name: FinCore-Event-Type, in: header, required: true, schema: { type: string, enum: [payment.captured, payment.failed] } }
+        - { name: FinCore-Signature, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PaymentEvent" }
+      responses:
+        "2XX": { description: Acknowledged. }
+components:
+  schemas:
+    PaymentEvent:
+      type: object
+      required: [event_id, type, occurred_at, payment]
+      properties:
+        event_id: { type: string, format: uuid }
+        type: { type: string, enum: [payment.captured, payment.failed] }
+        occurred_at: { type: string, format: date-time }
+        payment:
+          type: object
+          required: [id, merchant_id, amount, currency, status]
+          properties:
+            id: { type: string, format: uuid }
+            merchant_id: { type: string }
+            amount: { type: integer, format: int64 }
+            currency: { type: string }
+            status: { type: string, enum: [captured, failed] }
+            failure_reason: { type: string }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }

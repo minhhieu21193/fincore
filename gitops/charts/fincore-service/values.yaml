@@ -1,0 +1,125 @@
+# -- Name of the service; also the value of app.kubernetes.io/name.
+nameOverride: ""
+
+image:
+  repository: ""
+  tag: ""
+  # -- Optional digest (sha256:...). When set the image is pulled by digest.
+  digest: ""
+  pullPolicy: IfNotPresent
+
+# -- Container args (e.g. to select a binary).
+args: []
+
+replicas: 2
+
+ports:
+  http: 8080
+  metrics: 9090
+
+# -- Plain environment variables (name: value).
+env: {}
+
+# -- Environment variables from Secrets: NAME: {secret: <name>, key: <key>}.
+secretEnv: {}
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
+
+probes:
+  startup:
+    httpGet: { path: /healthz, port: http }
+    periodSeconds: 2
+    failureThreshold: 60
+  liveness:
+    httpGet: { path: /healthz, port: http }
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  readiness:
+    httpGet: { path: /readyz, port: http }
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 2
+
+# -- Seconds the pod keeps serving after SIGTERM is due, so endpoints are
+# removed from load balancers before the process starts draining.
+preStopSleepSeconds: 5
+terminationGracePeriodSeconds: 40
+
+service:
+  enabled: true
+  type: ClusterIP
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+pdb:
+  enabled: true
+  maxUnavailable: 1
+
+topologySpread:
+  enabled: true
+  # -- Use DoNotSchedule on real multi-AZ clusters; ScheduleAnyway keeps small dev clusters schedulable.
+  zoneWhenUnsatisfiable: ScheduleAnyway
+  hostWhenUnsatisfiable: ScheduleAnyway
+
+podMonitor:
+  enabled: true
+  interval: 15s
+
+serviceAccount:
+  create: true
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+priorityClassName: ""
+podLabels: {}
+podAnnotations: {}
+
+# Argo Rollouts canary. When disabled a plain Deployment with a rolling update is rendered.
+rollout:
+  enabled: false
+  # -- A rollback to one of the last N revisions is applied immediately, without canary steps.
+  rollbackWindowRevisions: 3
+  steps:
+    - setWeight: 10
+    - pause: { duration: 90s }
+    - setWeight: 30
+    - pause: { duration: 60s }
+    - setWeight: 60
+    - pause: { duration: 60s }
+  analysis:
+    enabled: true
+    # -- Minimum share of non-5xx responses served by canary pods.
+    successRate: 0.99
+    # -- Maximum p95 latency (seconds) of canary pods.
+    p95Seconds: 0.3
+    prometheusAddress: http://kube-prometheus-stack-prometheus.monitoring.svc:9090
+    initialDelay: 60s
+    interval: 30s
+    failureLimit: 1
+    # -- Measurements without data tolerated before the analysis is Inconclusive
+    # (the rollout then pauses for a human instead of promoting blindly).
+    inconclusiveLimit: 4
+    # -- Routes excluded from analysis (probes).
+    excludeRoutes: "GET /(healthz|readyz)"
+  # Weighted traffic split on an AWS ALB (requires ingress.enabled). Without it
+  # the split is approximated by the canary/stable replica ratio.
+  alb:
+    enabled: false
+
+ingress:
+  enabled: false
+  className: alb
+  host: ""
+  path: /
+  annotations: {}

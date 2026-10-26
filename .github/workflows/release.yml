@@ -1,0 +1,147 @@
+name: release
+
+# On every push to main that changes service code: build multi-arch images,
+# scan them, push to ECR with GitHub OIDC (no static AWS keys), then bump the
+# image tags in gitops/envs/aws/values — Argo CD syncs and Argo Rollouts runs
+# the canary. Steps that need AWS are skipped until the repository variables
+# AWS_DEPLOY_ROLE_ARN, AWS_REGION and ECR_REGISTRY are set (Terraform outputs).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "internal/**"
+      - "build/Dockerfile"
+      - "go.mod"
+      - "go.sum"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  TRIVY_VERSION: 0.76.1
+
+jobs:
+  gate:
+    name: AWS configured?
+    runs-on: ubuntu-24.04
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - id: check
+        env:
+          ROLE: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          if [ -n "$ROLE" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "### Release skipped: AWS_DEPLOY_ROLE_ARN is not set (no AWS account connected)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  build-push:
+    name: build, scan, push (${{ matrix.image }})
+    needs: gate
+    if: needs.gate.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC -> AWS STS
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { image: payments-api, service: payments-api, cmd: payments-api }
+          - { image: ledger, service: ledger, cmd: ledger }
+          - { image: notifier, service: notifier, cmd: notifier }
+          - { image: webhook-sink, service: notifier, cmd: webhook-sink }
+    env:
+      IMAGE: ${{ vars.ECR_REGISTRY }}/fincore/${{ matrix.image }}:${{ needs.gate.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build for scanning (amd64)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: build/Dockerfile
+          build-args: |
+            SERVICE=${{ matrix.service }}
+            CMD=${{ matrix.cmd }}
+            VERSION=${{ needs.gate.outputs.tag }}
+            COMMIT=${{ github.sha }}
+          tags: scan:${{ matrix.image }}
+          load: true
+          cache-from: type=gha,scope=${{ matrix.image }}
+      - name: Install Trivy (pinned, checksum-verified)
+        run: scripts/ci/install-trivy.sh "$TRIVY_VERSION"
+      - name: Trivy scan (fail on fixable HIGH/CRITICAL)
+        run: trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed --no-progress "scan:${{ matrix.image }}"
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+      - name: Build and push (linux/amd64 + linux/arm64)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: build/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            SERVICE=${{ matrix.service }}
+            CMD=${{ matrix.cmd }}
+            VERSION=${{ needs.gate.outputs.tag }}
+            COMMIT=${{ github.sha }}
+          tags: ${{ env.IMAGE }}
+          push: true
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  bump-gitops:
+    name: bump image tags in gitops/envs/aws
+    needs: [gate, build-push]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # commit the tag bump
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+      - name: Install yq
+        run: |
+          curl -sSfL -o /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+      - name: Bump tags and push
+        env:
+          TAG: ${{ needs.gate.outputs.tag }}
+        run: |
+          set -euo pipefail
+          for svc in payments-api ledger notifier webhook-sink; do
+            yq -i ".image.tag = \"$TAG\"" "gitops/envs/aws/values/$svc.yaml"
+          done
+          git config user.name "fincore-release-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "deploy(aws): services $TAG" || { echo "nothing to bump"; exit 0; }
+          # Pushes made with GITHUB_TOKEN do not trigger workflows: no release loop.
+          for attempt in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then
+              echo "### Deployed $TAG to gitops/envs/aws (Argo CD runs the canary)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep $((attempt * 5))
+          done
+          exit 1

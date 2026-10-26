@@ -1,0 +1,25 @@
+{{- if .Values.service.enabled }}
+{{- $name := include "svc.name" . -}}
+{{- $services := list $name -}}
+{{- if and .Values.rollout.enabled .Values.rollout.alb.enabled -}}
+{{- $services = list $name (printf "%s-stable" $name) (printf "%s-canary" $name) -}}
+{{- end -}}
+{{- range $svc := $services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svc }}
+  labels:
+    {{- include "svc.labels" $ | nindent 4 }}
+spec:
+  type: {{ $.Values.service.type }}
+  selector:
+    {{- include "svc.selectorLabels" $ | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $.Values.ports.http }}
+      targetPort: http
+      protocol: TCP
+{{- end }}
+{{- end }}

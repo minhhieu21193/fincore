@@ -1,0 +1,17 @@
+# Checkov configuration (run by scripts/check.sh and CI).
+# Resource-level exceptions are documented inline next to the resource
+# (#checkov:skip=<id>:<reason>); only repository-wide policy decisions are here.
+directory:
+  - terraform
+  - build
+  - .github/workflows
+framework:
+  - terraform
+  - dockerfile
+  - github_actions
+skip-path:
+  - \.terraform
+skip-check:
+  # Registry modules are pinned to exact versions (registry versions are
+  # immutable); commit-hash pinning applies to git module sources.
+  - CKV_TF_1

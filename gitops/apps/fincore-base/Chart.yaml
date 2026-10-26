@@ -1,0 +1,5 @@
+apiVersion: v2
+name: fincore-base
+description: Namespace-wide FinCore resources — ExternalSecrets for credentials and the idempotent database bootstrap job.
+type: application
+version: 0.1.0

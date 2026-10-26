@@ -1,0 +1,4 @@
+configs:
+  cm:
+    # Local commits should show up quickly.
+    timeout.reconciliation: 20s

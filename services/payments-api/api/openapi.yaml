@@ -1,0 +1,137 @@
+openapi: 3.1.0
+info:
+  title: FinCore Payments API
+  version: 1.0.0
+  description: |
+    Accepts card payments. Every `POST /v1/payments` must carry an
+    `Idempotency-Key`; retries with the same key and body return the original
+    response byte for byte (`Idempotent-Replayed: true`) and never charge twice.
+
+    Payment state machine: `pending → authorized → captured`, with
+    `pending|authorized → failed`. `captured` and `failed` are terminal.
+servers:
+  - url: http://localhost:8080
+paths:
+  /v1/payments:
+    post:
+      operationId: createPayment
+      summary: Create and capture a card payment
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique per logical payment attempt, scoped to the merchant. Reuse it for retries.
+          schema: { type: string, minLength: 1, maxLength: 255 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePaymentRequest" }
+            example: { merchant_id: m_demo, amount: 1999, currency: USD, card_token: tok_visa }
+      responses:
+        "201":
+          description: Payment captured.
+          headers:
+            Idempotent-Replayed: { $ref: "#/components/headers/IdempotentReplayed" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        "402":
+          description: Card declined; the payment is `failed` (final).
+          headers:
+            Idempotent-Replayed: { $ref: "#/components/headers/IdempotentReplayed" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409":
+          description: A request with this key is still in flight. Retry after `Retry-After` seconds.
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: Invalid body, or the key was already used with a different body.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Temporary failure (processor or ledger). Retry with the same key; processing resumes where it stopped.
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /v1/payments/{id}:
+    get:
+      operationId: getPayment
+      summary: Get a payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The payment.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Payment" }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /healthz:
+    get:
+      operationId: liveness
+      responses: { "200": { description: Process is alive. } }
+  /readyz:
+    get:
+      operationId: readiness
+      responses:
+        "200": { description: Ready to receive traffic (database reachable). }
+        "503": { description: Not ready or shutting down. }
+components:
+  headers:
+    IdempotentReplayed:
+      description: "`true` when the response was replayed from a previous request with the same key."
+      schema: { type: boolean }
+  responses:
+    Error:
+      description: Error.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    CreatePaymentRequest:
+      type: object
+      additionalProperties: false
+      required: [merchant_id, amount, currency, card_token]
+      properties:
+        merchant_id: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$" }
+        amount: { type: integer, format: int64, minimum: 1, maximum: 100000000, description: Minor units (cents). }
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        card_token:
+          type: string
+          maxLength: 64
+          description: |
+            Tokenised card (never a PAN). Test tokens: `tok_visa` (approved subject to
+            the configured decline rate), `tok_decline` (always declined),
+            `tok_unavailable` (processor unavailable → 503).
+    Payment:
+      type: object
+      required: [id, merchant_id, amount, currency, status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        merchant_id: { type: string }
+        amount: { type: integer, format: int64 }
+        currency: { type: string }
+        status: { type: string, enum: [pending, authorized, captured, failed] }
+        failure_reason: { type: string, examples: [card_declined] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        message: { type: string }

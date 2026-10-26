@@ -1,0 +1,75 @@
+==> creating kind cluster 'fincore'
+Creating cluster "fincore" ...
+ • Ensuring node image (kindest/node:v1.36.4) 🖼️  ...
+ ✓ Ensuring node image (kindest/node:v1.36.4) 🖼️
+ • Preparing nodes 📦 📦 📦 📦   ...
+ ✓ Preparing nodes 📦 📦 📦 📦 
+ • Writing configuration 📜  ...
+ ✓ Writing configuration 📜
+ • Starting control-plane 🕹️  ...
+ ✓ Starting control-plane 🕹️
+ • Installing CNI 🔌  ...
+ ✓ Installing CNI 🔌
+ • Installing StorageClass 💾  ...
+ ✓ Installing StorageClass 💾
+ • Joining worker nodes 🚜  ...
+ ✓ Joining worker nodes 🚜
+ • Waiting ≤ 2m0s for control-plane = Ready ⏳  ...
+ ✓ Waiting ≤ 2m0s for control-plane = Ready ⏳
+ • Ready after 9s 💚
+Set kubectl context to "kind-fincore"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-fincore --kubeconfig <repo>/.kube/kind-config
+
+Thanks for using kind! 😊
+ ✔ kubeconfig: <repo>/.kube/kind-config
+==> building and loading images
+ ✔ built fincore/gitserver:local
+ ✔ loaded fincore/gitserver:local into kind/fincore
+ ✔ built fincore/payments-api:0.1.0 (fault_rate=0)
+ ✔ loaded fincore/payments-api:0.1.0 into kind/fincore
+ ✔ built fincore/ledger:0.1.0 (fault_rate=0)
+ ✔ loaded fincore/ledger:0.1.0 into kind/fincore
+ ✔ built fincore/notifier:0.1.0 (fault_rate=0)
+ ✔ loaded fincore/notifier:0.1.0 into kind/fincore
+ ✔ built fincore/webhook-sink:0.1.0 (fault_rate=0)
+ ✔ loaded fincore/webhook-sink:0.1.0 into kind/fincore
+==> local secrets (generated once, never committed)
+ ✔ created secret fincore-db-admin
+ ✔ created secret fincore-payments-db
+ ✔ created secret fincore-ledger-db
+ ✔ created secret fincore-webhook-signing
+==> git server (serves <repo>/.git read-only to Argo CD)
+ ✔ gitserver ready
+==> Argo CD (chart 10.11.1)
+ ✔ Argo CD ready
+==> root application (app-of-apps, env=kind)
+Warning: metadata.finalizers: "resources-finalizer.argocd.argoproj.io": prefer a domain-qualified finalizer name including a path (/) to avoid accidental conflicts with other finalizer writers
+==> waiting for every application to be Synced and Healthy (first run: ~5-10 min)
+NAME                    SYNC STATUS   HEALTH STATUS
+argo-rollouts           Synced        Healthy
+cert-manager            Synced        Healthy
+cluster-issuers         Synced        Healthy
+external-secrets        Synced        Healthy
+fincore-base            Synced        Healthy
+kube-prometheus-stack   Synced        Healthy
+ledger                  Synced        Healthy
+local-infra             Synced        Healthy
+metrics-server          Synced        Healthy
+notifier                Synced        Healthy
+payments-api            Synced        Healthy
+root                    Synced        Healthy
+secret-stores           Synced        Healthy
+traffic-generator       Synced        Healthy
+webhook-sink            Synced        Healthy
+ ✔ FinCore is up on kind (330s)
+
+  export KUBECONFIG=<repo>/.kube/kind-config
+  Argo CD UI:     kubectl -n argocd port-forward svc/argocd-server 8081:80   (user admin)
+                  kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+  Rollouts UI:    kubectl argo rollouts dashboard   (http://localhost:3100)
+  Payments API:   kubectl -n fincore port-forward svc/payments-api 8080:8080
+  End-to-end:     make e2e
+  Bad release:    make demo-bad-release
+scripts/kind-up.sh  13.79s user 10.93s system 5% cpu 7:57.90 total

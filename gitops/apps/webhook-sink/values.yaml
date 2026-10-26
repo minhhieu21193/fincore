@@ -1,0 +1,11 @@
+# Demo merchant endpoint (stands in for a customer's webhook receiver).
+nameOverride: webhook-sink
+# Single replica: it keeps received events in memory for end-to-end assertions.
+replicas: 1
+pdb:
+  enabled: false
+secretEnv:
+  WEBHOOK_SIGNING_SECRET: { secret: webhook-signing, key: secret }
+resources:
+  requests: { cpu: 10m, memory: 32Mi }
+  limits: { memory: 96Mi }
