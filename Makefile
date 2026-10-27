@@ -57,6 +57,10 @@ demo-netpol: ## Phase 2 B3: NetworkPolicies isolate the cardholder-data zone
 demo-rotation: ## Phase 2 B2: the ledger's Vault-issued DB credentials rotate without a restart
 	scripts/demo-rotation.sh
 
+.PHONY: demo-observability
+demo-observability: ## Phase 3 C1: one payment followed from its trace to its logs to its ledger entry; dashboards have data
+	scripts/demo-observability.sh
+
 .PHONY: vault-init
 vault-init: ## One-time Vault initialisation (run by kind-up; on EKS run it once by hand)
 	scripts/vault-init.sh
