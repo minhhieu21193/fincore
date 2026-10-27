@@ -20,6 +20,15 @@ ports:
 # -- Plain environment variables (name: value).
 env: {}
 
+tracing:
+  # -- OTLP/HTTP endpoint for spans (Tempo). Empty: spans are still created and
+  # propagated (trace_id in every log line) but not exported.
+  endpoint: http://tempo.monitoring.svc.cluster.local:4318
+  # -- Share of new traces kept. Parent-based: a caller's sampling decision
+  # (traceparent) always wins, so a request sent with a sampled traceparent is
+  # recorded end to end whatever the ratio.
+  sampleRatio: "0.1"
+
 # -- Environment variables from Secrets: NAME: {secret: <name>, key: <key>}.
 secretEnv: {}
 
