@@ -63,6 +63,32 @@ kind_tag() {
   yq -r '.image.tag' "$ROOT/gitops/envs/kind/values/$1.yaml"
 }
 
+# rollouts_settled: every Argo Rollout in the cluster is Healthy and fully
+# promoted (no canary in progress, paused or aborted).
+rollouts_settled() {
+  kubectl get rollouts.argoproj.io -A -o json | jq -e '
+    [.items[] | select(.status.phase != "Healthy" or .status.currentPodHash != .status.stableRS)]
+    | length == 0' >/dev/null
+}
+
+# wait_rollouts_settled [timeout]: on kind, never start a release while another
+# canary is running: overlapping canaries share one small CPU budget and skew
+# each other's latency analysis.
+wait_rollouts_settled() {
+  local timeout="${1:-900}" start=$SECONDS
+  until rollouts_settled; do
+    if (( SECONDS - start > timeout )); then
+      kubectl get rollouts.argoproj.io -A
+      die "a rollout is still in progress after ${timeout}s; not starting another release"
+    fi
+    if (( SECONDS - start == 0 )) || (( (SECONDS - start) % 60 < 5 )); then
+      log "waiting for in-progress rollouts to finish before releasing"
+      kubectl get rollouts.argoproj.io -A --no-headers | awk '{printf "   %s/%s\n", $1, $2}'
+    fi
+    sleep 5
+  done
+}
+
 # wait_for <description> <timeout seconds> <command...>
 wait_for() {
   local what="$1" timeout="$2"; shift 2
