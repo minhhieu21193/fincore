@@ -89,6 +89,12 @@ else
 fi
 ok "kubeconfig: $KUBECONFIG"
 
+# The control-plane node (API server, etcd, controllers; nothing else is
+# scheduled there) gets at most 2 CPUs. The API server holds ~1 GB of CRD
+# schemas, and its garbage-collection bursts otherwise took most of the VM for
+# seconds at a time, stalling the application nodes (canary p95 failures).
+docker update --cpus=2 "$CLUSTER-control-plane" >/dev/null
+
 # ---------------------------------------------------------------- registry (stand-in for ECR)
 ca_fp="$(openssl x509 -in "$PKI/registry-ca.crt" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d :)"
 if [[ "$(docker inspect -f '{{index .Config.Labels "fincore.io/ca"}}' "$REGISTRY_CONTAINER" 2>/dev/null)" != "$ca_fp" ]]; then
