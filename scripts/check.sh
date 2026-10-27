@@ -64,6 +64,7 @@ helm_lint() {
   "${lint[@]}" gitops/platform/cluster-issuers &&
   "${lint[@]}" gitops/platform/karpenter-nodepools --set clusterName=lint --set nodeRole=lint &&
   "${lint[@]}" policies &&
+  "${lint[@]}" dashboards &&
   "${lint[@]}" policies --set signature.mode=keyless &&
   "${lint[@]}" gitops/apps/fincore-base -f gitops/apps/cde-base/values.yaml &&
   "${lint[@]}" gitops/bootstrap/app-of-apps -f gitops/envs/kind/app-of-apps.yaml &&
@@ -98,8 +99,16 @@ policy_tests() {
   rm -rf "$out"
 }
 
+# The committed dashboard JSON is exactly what dashboards/generate.py produces.
+dashboards_check() {
+  local out
+  out="$(mktemp -d)"
+  python3 dashboards/generate.py "$out" && diff -r dashboards/json "$out" || return 1
+  rm -rf "$out"
+}
+
 static_checks() {
-  need terraform tflint checkov helm yq jq kubeconform kyverno actionlint shellcheck
+  need terraform tflint checkov helm yq jq kubeconform kyverno actionlint shellcheck python3
   run "terraform fmt" terraform fmt -check -recursive terraform
   run "terraform validate" terraform_validate
   run "tflint" tflint_all
@@ -107,6 +116,7 @@ static_checks() {
   run "helm lint" helm_lint
   run "kubeconform (kind + aws, rendered as Argo CD would)" kubeconform_envs
   run "kyverno test (admission policies)" policy_tests
+  run "dashboards up to date" dashboards_check
   run "actionlint" actionlint
   run "shellcheck" shellcheck -x scripts/*.sh scripts/ci/*.sh
   run "shellcheck (in-cluster scripts)" shellcheck -s sh gitops/platform/vault-config/files/configure.sh
