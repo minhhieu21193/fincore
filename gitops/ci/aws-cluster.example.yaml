@@ -13,3 +13,9 @@ cluster:
   dbHost: fincore-demo.cluster-xxxxxxxxxxxx.ap-southeast-1.rds.amazonaws.com
   dbAdminSecretName: arn:aws:secretsmanager:ap-southeast-1:000000000000:secret:rds!cluster-00000000-0000-0000-0000-000000000000-AbCdEf
   paymentEventsQueueUrl: https://sqs.ap-southeast-1.amazonaws.com/000000000000/fincore-demo-payment-events
+  vpcCidr: 10.40.0.0/16
+  publicSubnetCidrs: [10.40.0.0/24, 10.40.1.0/24, 10.40.2.0/24]
+  databaseSubnetCidrs: [10.40.20.0/24, 10.40.21.0/24, 10.40.22.0/24]
+  vaultKmsKeyId: arn:aws:kms:ap-southeast-1:000000000000:key/00000000-0000-0000-0000-000000000000
+  wafAclArn: arn:aws:wafv2:ap-southeast-1:000000000000:regional/webacl/fincore-demo/00000000-0000-0000-0000-000000000000
+  kmsKeyArn: arn:aws:kms:ap-southeast-1:000000000000:key/11111111-1111-1111-1111-111111111111

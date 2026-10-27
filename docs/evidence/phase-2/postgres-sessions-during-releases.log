@@ -1,0 +1,283 @@
+== 15:39:12
+== 15:39:14
+E1027 22:39:15.165816   12932 websocket.go:296] Unknown stream id 1, discarding message
+payments | active | : | 1 | -00:00:00.025709
+payments | active | Client:ClientRead | 1 | -00:00:00.025025
+== 15:39:17
+== 15:39:19
+== 15:39:22
+== 15:39:24
+== 15:39:26
+payments | idle in transaction | Client:ClientRead | 3 | 00:00:00.398081
+== 15:39:30
+payments | active | : | 1 | -00:00:00.005332
+payments | active | Client:ClientRead | 1 | -00:00:00.010429
+== 15:39:34
+== 15:39:38
+== 15:39:40
+payments | active | LWLock:WALWrite | 4 | -00:00:00.039083
+v-kubernet-ledger-0TvboO3hM7HnvaGBCF8Z-1793115567 | active | : | 2 | -00:00:00.035584
+payments | active | IO:WalWrite | 1 | -00:00:00.046649
+v-kubernet-ledger-0TvboO3hM7HnvaGBCF8Z-1793115567 | idle in transaction | : | 1 | -00:00:00.044149
+v-kubernet-ledger-8KeseOZRzR0pfPkEz81r-1793115454 | active | : | 1 | -00:00:00.044755
+v-kubernet-ledger-8KeseOZRzR0pfPkEz81r-1793115454 | active | LWLock:WALWrite | 1 | 00:00:00.091463
+== 15:39:45
+== 15:39:48
+== 15:39:51
+== 15:39:54
+payments | idle in transaction | Client:ClientRead | 1 | 00:00:00.00122
+== 15:39:56
+== 15:39:59
+payments | idle in transaction | Client:ClientRead | 1 | 00:00:00.026128
+== 15:40:01
+payments | active | : | 1 | -00:00:00.0194
+== 15:40:04
+payments | idle in transaction | : | 1 | -00:00:00.025419
+== 15:40:07
+== 15:40:10
+payments | active | : | 3 | -00:00:00.245047
+payments | active | IO:WalSync | 1 | -00:00:00.258461
+payments | idle in transaction | : | 1 | -00:00:00.280258
+v-kubernet-ledger-uEprDbgebvIFqlA3Lxap-1793115583 | active | : | 1 | 00:00:00.007748
+ | active | : | 1 | 00:00:00.007783
+== 15:40:14
+== 15:40:17
+== 15:40:21
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.013704
+v-kubernet-ledger-0TvboO3hM7HnvaGBCF8Z-1793115567 | active | : | 1 | -00:00:00.048381
+== 15:40:24
+payments | idle in transaction | Client:ClientRead | 1 | 00:00:00.011441
+== 15:40:26
+payments | idle in transaction | Client:ClientRead | 2 | 00:00:00.127079
+== 15:40:29
+== 15:40:32
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.021518
+v-kubernet-ledger-0TvboO3hM7HnvaGBCF8Z-1793115567 | active | : | 1 | -00:00:00.013064
+== 15:40:34
+v-kubernet-ledger-uEprDbgebvIFqlA3Lxap-1793115583 | idle in transaction | Client:ClientRead | 1 | -00:00:00.012366
+== 15:40:37
+v-kubernet-ledger-0TvboO3hM7HnvaGBCF8Z-1793115567 | idle in transaction | : | 1 | -00:00:00.038182
+== 15:40:41
+payments | idle in transaction | : | 1 | -00:00:00.025912
+== 15:40:43
+payments | active | Client:ClientRead | 1 | -00:00:00.0336
+== 15:40:46
+payments | active | : | 1 | -00:00:00.015888
+v-kubernet-ledger-cwSD014KcN2dzZmw8AYW-1793115626 | active | : | 1 | -00:00:00.015283
+== 15:40:49
+payments | idle in transaction | : | 1 | -00:00:00.023971
+== 15:40:52
+== 15:40:55
+== 15:40:57
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.013395
+== 15:40:59
+== 15:41:02
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.026299
+== 15:41:04
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.003132
+v-kubernet-ledger-uEprDbgebvIFqlA3Lxap-1793115583 | active | : | 1 | -00:00:00.018168
+== 15:41:07
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.009217
+== 15:41:09
+== 15:41:11
+ | active | : | 1 | 00:00:00.297385
+== 15:41:14
+== 15:41:16
+payments | idle in transaction | : | 1 | -00:00:00.015349
+== 15:41:18
+== 15:41:21
+== 15:41:23
+== 15:41:25
+== 15:41:27
+== 15:41:31
+payments | idle in transaction | : | 1 | 00:00:00.062169
+payments | idle in transaction | Client:ClientRead | 1 | 00:00:00.008007
+== 15:41:34
+payments | idle in transaction | : | 1 | -00:00:00.044284
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.021472
+== 15:41:37
+payments | idle in transaction | : | 1 | -00:00:00.011983
+v-kubernet-ledger-cwSD014KcN2dzZmw8AYW-1793115626 | active | : | 1 | -00:00:00.009638
+== 15:41:39
+payments | idle in transaction | Client:ClientRead | 1 | 00:00:00.003415
+== 15:41:41
+== 15:41:45
+== 15:41:47
+== 15:41:50
+== 15:41:52
+== 15:41:55
+== 15:41:57
+== 15:41:59
+== 15:42:01
+payments | idle in transaction | Client:ClientRead | 1 | 00:00:00.020322
+== 15:42:03
+== 15:42:06
+== 15:42:08
+== 15:42:10
+== 15:42:12
+== 15:42:14
+== 15:42:16
+== 15:42:19
+== 15:42:21
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.004528
+== 15:42:23
+== 15:42:25
+== 15:42:27
+== 15:42:29
+== 15:42:32
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.003286
+== 15:42:34
+== 15:42:36
+== 15:42:38
+== 15:42:41
+v-kubernet-ledger-u3b2SVZvDuZqK79hbWXa-1793115698 | active | : | 1 | -00:00:00.024664
+== 15:42:43
+== 15:42:45
+== 15:42:47
+== 15:42:50
+== 15:42:52
+== 15:42:54
+== 15:42:56
+== 15:42:58
+== 15:43:01
+== 15:43:03
+== 15:43:05
+== 15:43:07
+== 15:43:09
+== 15:43:12
+== 15:43:14
+== 15:43:16
+== 15:43:19
+== 15:43:21
+== 15:43:23
+== 15:43:25
+== 15:43:27
+== 15:43:30
+== 15:43:32
+== 15:43:34
+== 15:43:36
+== 15:43:38
+== 15:43:41
+== 15:43:43
+== 15:43:45
+== 15:43:47
+== 15:43:50
+payments | active | IO:WalSync | 1 | -00:00:00.007607
+== 15:43:52
+== 15:43:55
+== 15:43:57
+== 15:44:00
+payments | active | : | 1 | -00:00:00.014794
+v-kubernet-ledger-mc0aYrPBLFePaJKY2zoE-1793115827 | idle in transaction | : | 1 | -00:00:00.015148
+== 15:44:03
+payments | active | IO:WalSync | 1 | -00:00:00.055409
+== 15:44:06
+v-kubernet-ledger-vAQESndXuxqSjMI2LnoJ-1793115754 | active | : | 1 | -00:00:00.013988
+== 15:44:08
+payments | active | Client:ClientRead | 1 | -00:00:00.022153
+== 15:44:11
+payments | active | : | 1 | -00:00:00.005964
+payments | active | IO:WalSync | 1 | 00:00:00.002331
+payments | active | LWLock:WALWrite | 1 | -00:00:00.00319
+ | active | : | 1 | 00:00:00.424004
+== 15:44:14
+payments | idle in transaction | Client:ClientRead | 1 | 00:00:00.023955
+v-kubernet-ledger-Va9fRRx11fi34wQIRPMm-1793115840 | active | : | 1 | -00:00:00.019921
+== 15:44:16
+payments | idle in transaction | : | 1 | -00:00:00.03584
+v-kubernet-ledger-mc0aYrPBLFePaJKY2zoE-1793115827 | active | IO:WalSync | 1 | -00:00:00.034721
+== 15:44:19
+== 15:44:22
+payments | active | : | 1 | 00:00:00.00719
+v-kubernet-ledger-vAQESndXuxqSjMI2LnoJ-1793115754 | idle in transaction | : | 1 | -00:00:00.025384
+== 15:44:24
+payments | idle in transaction | Client:ClientRead | 1 | 00:00:00.179097
+== 15:44:27
+payments | active | LWLock:WALWrite | 3 | -00:00:00.044572
+payments | idle in transaction | Client:ClientRead | 2 | 00:00:00.296869
+v-kubernet-ledger-mc0aYrPBLFePaJKY2zoE-1793115827 | active | : | 1 | -00:00:00.058089
+v-kubernet-ledger-vAQESndXuxqSjMI2LnoJ-1793115754 | active | IO:WalSync | 1 | -00:00:00.056172
+== 15:44:31
+payments | idle in transaction | Client:ClientRead | 2 | -00:00:00.121718
+v-kubernet-ledger-Va9fRRx11fi34wQIRPMm-1793115840 | idle in transaction | : | 1 | -00:00:00.129273
+== 15:44:36
+payments | idle in transaction | : | 1 | -00:00:00.021375
+== 15:44:39
+payments | active | IO:WalSync | 1 | -00:00:00.017293
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.020676
+v-kubernet-ledger-Va9fRRx11fi34wQIRPMm-1793115840 | active | LWLock:WALWrite | 1 | -00:00:00.023523
+== 15:44:41
+== 15:44:46
+v-kubernet-ledger-mc0aYrPBLFePaJKY2zoE-1793115827 | idle in transaction | Client:ClientRead | 1 | -00:00:00.133803
+== 15:44:50
+== 15:44:53
+payments | active | IO:WalSync | 1 | -00:00:00.024145
+payments | idle in transaction | Client:ClientRead | 1 | 00:00:00.049356
+== 15:44:55
+payments | active | IO:WalSync | 1 | -00:00:00.015903
+== 15:44:58
+payments | active | IO:WalSync | 1 | -00:00:00.062178
+v-kubernet-ledger-Va9fRRx11fi34wQIRPMm-1793115840 | idle in transaction | Client:ClientRead | 1 | -00:00:00.061844
+== 15:45:00
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.018123
+== 15:45:03
+payments | idle in transaction | : | 1 | -00:00:00.013898
+== 15:45:05
+== 15:45:08
+== 15:45:10
+== 15:45:13
+payments | idle in transaction | Client:ClientRead | 1 | 00:00:00.01094
+== 15:45:15
+== 15:45:18
+== 15:45:20
+== 15:45:23
+== 15:45:26
+ | active | : | 1 | -00:00:00.01176
+== 15:45:28
+== 15:45:30
+== 15:45:33
+== 15:45:35
+== 15:45:38
+== 15:45:41
+== 15:45:43
+v-kubernet-ledger-mc0aYrPBLFePaJKY2zoE-1793115827 | active | : | 1 | -00:00:00.013026
+== 15:45:46
+v-kubernet-ledger-mc0aYrPBLFePaJKY2zoE-1793115827 | active | : | 1 | -00:00:00.012678
+== 15:45:48
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.007018
+== 15:45:50
+== 15:45:53
+payments | idle in transaction | : | 1 | -00:00:00.033762
+== 15:45:55
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.023184
+== 15:45:58
+payments | active | : | 2 | -00:00:00.035819
+payments | active | IO:WalSync | 1 | -00:00:00.032015
+payments | active | LWLock:WALWrite | 1 | -00:00:00.030531
+== 15:46:01
+payments | idle in transaction | Client:ClientRead | 2 | -00:00:00.078871
+payments | active | IO:WalSync | 1 | -00:00:00.122063
+== 15:46:04
+== 15:46:06
+v-kubernet-ledger-Va9fRRx11fi34wQIRPMm-1793115840 | idle in transaction | : | 1 | -00:00:00.026832
+== 15:46:09
+== 15:46:11
+== 15:46:14
+payments | idle in transaction | Client:ClientRead | 1 | -00:00:00.01715
+== 15:46:16
+== 15:46:19
+== 15:46:21
+== 15:46:24
+== 15:46:26
+== 15:46:29
+== 15:46:31
+== 15:46:33
+== 15:46:35
+== 15:46:37
+== 15:46:40
+== 15:46:42
+== 15:46:45
+== 15:46:48
+== 15:46:50
+== 15:46:53
+payments | active | : | 1 | -00:00:00.017025

@@ -214,7 +214,43 @@ func Run(ctx context.Context, cfg Config, handler http.Handler, rd *Readiness) e
 	return err
 }
 
-// Client returns an HTTP client that propagates trace context.
+// ConnRecycleInterval is how often a Client drops its idle keep-alive
+// connections (see Client).
+const ConnRecycleInterval = 10 * time.Second
+
+// Client returns an HTTP client for calls to other services. It propagates
+// trace context and keeps connections alive, but drops idle connections every
+// ConnRecycleInterval. Kubernetes Services balance per connection, so a
+// keep-alive pool that is never recycled stays pinned to the pods that existed
+// when it was opened: a canary, a scaled-out replica or a replacement pod
+// would receive no traffic from this client.
 func Client(timeout time.Duration) *http.Client {
-	return &http.Client{Timeout: timeout, Transport: otelhttp.NewTransport(http.DefaultTransport)}
+	base := http.DefaultTransport.(*http.Transport).Clone()
+	return &http.Client{Timeout: timeout, Transport: otelhttp.NewTransport(newRecyclingTransport(base, ConnRecycleInterval))}
 }
+
+// recyclingTransport closes the idle connections of its pool at most once per
+// interval, from RoundTrip itself (no background goroutine). Connections that
+// are in use finish their request and are closed at the next recycle.
+type recyclingTransport struct {
+	base     *http.Transport
+	interval time.Duration
+	next     atomic.Int64 // UnixNano of the next recycle
+}
+
+func newRecyclingTransport(base *http.Transport, interval time.Duration) *recyclingTransport {
+	t := &recyclingTransport{base: base, interval: interval}
+	t.next.Store(time.Now().Add(interval).UnixNano())
+	return t
+}
+
+func (t *recyclingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	now := time.Now().UnixNano()
+	if n := t.next.Load(); now >= n && t.next.CompareAndSwap(n, now+int64(t.interval)) {
+		t.base.CloseIdleConnections()
+	}
+	return t.base.RoundTrip(r)
+}
+
+// CloseIdleConnections lets http.Client.CloseIdleConnections reach the pool.
+func (t *recyclingTransport) CloseIdleConnections() { t.base.CloseIdleConnections() }

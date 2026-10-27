@@ -1,0 +1,22 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-read-only-root-fs
+  annotations:
+    policies.kyverno.io/title: Read-only root filesystem
+    policies.kyverno.io/description: >-
+      Every container must mount its root filesystem read-only; writable paths
+      are explicit volumes (emptyDir), so a compromised process cannot alter the image.
+spec:
+  {{- include "policies.common" . | nindent 2 }}
+  {{- include "policies.matchEnforcedPods" . | nindent 2 }}
+  variables:
+    - name: offenders
+      expression: >-
+        (object.spec.containers + object.spec.?initContainers.orValue([])).filter(c,
+          !c.?securityContext.?readOnlyRootFilesystem.orValue(false)
+        ).map(c, c.name)
+  validations:
+    - expression: size(variables.offenders) == 0
+      messageExpression: >-
+        'readOnlyRootFilesystem must be true for: ' + variables.offenders.join(', ')

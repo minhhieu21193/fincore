@@ -1,4 +1,40 @@
+# Internal CA (both environments): a self-signed root that issues certificates
+# for in-cluster TLS (Vault and its clients). Never exposed outside the cluster.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: fincore-selfsigned-root
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: fincore-internal-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: fincore-internal-ca
+  secretName: fincore-internal-ca
+  duration: 8760h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    kind: ClusterIssuer
+    name: fincore-selfsigned-root
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: fincore-internal
+spec:
+  ca:
+    secretName: fincore-internal-ca
+---
 {{- if eq .Values.mode "letsencrypt" }}
+# Public certificates (the API's ingress): Let's Encrypt with Route 53 DNS-01.
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -15,36 +51,12 @@ spec:
             region: {{ .Values.letsencrypt.region }}
             hostedZoneID: {{ required "letsencrypt.hostedZoneID is required" .Values.letsencrypt.hostedZoneID }}
 {{- else }}
-# Local CA: a self-signed root that issues everything else.
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: fincore-selfsigned-root
-spec:
-  selfSigned: {}
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: fincore-local-ca
-  namespace: cert-manager
-spec:
-  isCA: true
-  commonName: fincore-local-ca
-  secretName: fincore-local-ca
-  duration: 8760h
-  privateKey:
-    algorithm: ECDSA
-    size: 256
-  issuerRef:
-    kind: ClusterIssuer
-    name: fincore-selfsigned-root
----
+# kind: "public" certificates come from the internal CA as well.
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: fincore
 spec:
   ca:
-    secretName: fincore-local-ca
+    secretName: fincore-internal-ca
 {{- end }}

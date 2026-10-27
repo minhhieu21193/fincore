@@ -1,0 +1,29 @@
+# Server certificate for the Vault API (8200) and Raft cluster traffic (8201).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vault-server-tls
+spec:
+  secretName: vault-server-tls
+  duration: 2160h
+  renewBefore: 360h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  usages: [server auth, client auth]
+  commonName: vault.{{ .Release.Namespace }}.svc
+  dnsNames:
+    - vault
+    - vault.{{ .Release.Namespace }}
+    - vault.{{ .Release.Namespace }}.svc
+    - vault.{{ .Release.Namespace }}.svc.cluster.local
+    - vault-active.{{ .Release.Namespace }}.svc
+    - vault-active.{{ .Release.Namespace }}.svc.cluster.local
+    - "*.vault-internal"
+    - "*.vault-internal.{{ .Release.Namespace }}.svc"
+    - "*.vault-internal.{{ .Release.Namespace }}.svc.cluster.local"
+  ipAddresses: [127.0.0.1]
+  issuerRef:
+    kind: ClusterIssuer
+    name: fincore-internal

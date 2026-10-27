@@ -85,6 +85,18 @@ priorityClassName: ""
 podLabels: {}
 podAnnotations: {}
 
+# Vault Agent sidecar (added by the Vault injector) that renders short-lived
+# database credentials to /vault/secrets/db.json and re-renders them before they
+# expire; the service re-reads the file for every new connection (DB_CREDENTIALS_FILE).
+vault:
+  enabled: false
+  # -- Vault Kubernetes-auth role (bound to this service account, audience "vault").
+  role: ""
+  # -- Vault path of the dynamic database credentials, e.g. database/creds/ledger.
+  databaseCredentialsPath: ""
+  # -- Secret in the namespace with the CA of Vault's certificate (key ca.crt).
+  caSecret: vault-ca
+
 # Argo Rollouts canary. When disabled a plain Deployment with a rolling update is rendered.
 rollout:
   enabled: false

@@ -15,3 +15,10 @@ disruption:
   expireAfter: 720h
   # -- Never disrupt more than 10% of nodes at once.
   budget: "10%"
+# Cardholder-data zone NodePool (on-demand, tainted fincore.io/zone=cde).
+cde:
+  enabled: true
+  cpuLimit: "16"
+  # -- Tags of the CDE node security group created by Terraform (modules/eks).
+  securityGroupTags:
+    fincore.io/security-group: cde

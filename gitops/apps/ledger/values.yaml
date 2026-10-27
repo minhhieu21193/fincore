@@ -2,11 +2,16 @@ nameOverride: ledger
 replicas: 2
 env:
   DB_NAME: ledger
-  DB_USER: ledger
   DB_PORT: "5432"
   DB_MAX_CONNS: "10"
-secretEnv:
-  DB_PASSWORD: { secret: ledger-db, key: password }
+  # Connections are recycled well within the remaining lifetime of the Vault-issued
+  # user, so the old user is idle by the time Vault revokes it.
+  DB_MAX_CONN_LIFETIME: 10m
+# No static password: Vault issues a short-lived PostgreSQL user per pod.
+vault:
+  enabled: true
+  role: ledger
+  databaseCredentialsPath: database/creds/ledger
 resources:
   requests: { cpu: 50m, memory: 64Mi }
   limits: { memory: 192Mi }
@@ -16,3 +21,8 @@ autoscaling:
   maxReplicas: 8
 rollout:
   enabled: true
+# Cardholder-data zone: dedicated, tainted nodes only.
+nodeSelector:
+  fincore.io/node-role: cde
+tolerations:
+  - { key: fincore.io/zone, operator: Equal, value: cde, effect: NoSchedule }

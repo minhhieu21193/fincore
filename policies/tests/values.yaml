@@ -1,0 +1,19 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Values
+metadata:
+  name: namespaces
+namespaceSelector:
+  - name: fincore-cde
+    labels:
+      kubernetes.io/metadata.name: fincore-cde
+      fincore.io/policy: enforced
+  - name: fincore
+    labels:
+      kubernetes.io/metadata.name: fincore
+      fincore.io/policy: enforced
+  - name: playground
+    labels:
+      kubernetes.io/metadata.name: playground
+  - name: kube-system
+    labels:
+      kubernetes.io/metadata.name: kube-system

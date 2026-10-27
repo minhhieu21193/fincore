@@ -1,0 +1,5 @@
+apiVersion: v2
+name: fincore-policies
+description: Kyverno admission policies for FinCore namespaces (CEL ValidatingPolicy / ImageValidatingPolicy).
+type: application
+version: 0.1.0

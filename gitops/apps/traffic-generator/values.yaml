@@ -1,4 +1,4 @@
 image: grafana/k6:2.3.0@sha256:2dd4756ec6e14e62778916e1eb850108e4b499304c02df56760fa0bdb0fba0b8
 # -- Payments per second.
 rate: 10
-target: http://payments-api.fincore.svc.cluster.local:8080
+target: http://payments-api.fincore-cde.svc.cluster.local:8080

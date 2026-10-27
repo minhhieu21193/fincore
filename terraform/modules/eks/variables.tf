@@ -13,8 +13,8 @@ variable "addon_versions" {
   type        = map(string)
 
   validation {
-    condition     = alltrue([for a in ["vpc-cni", "eks-pod-identity-agent", "kube-proxy", "coredns"] : contains(keys(var.addon_versions), a)])
-    error_message = "addon_versions must pin vpc-cni, eks-pod-identity-agent, kube-proxy and coredns."
+    condition     = alltrue([for a in ["vpc-cni", "eks-pod-identity-agent", "kube-proxy", "coredns", "aws-ebs-csi-driver"] : contains(keys(var.addon_versions), a)])
+    error_message = "addon_versions must pin vpc-cni, eks-pod-identity-agent, kube-proxy, coredns and aws-ebs-csi-driver."
   }
 }
 
@@ -74,4 +74,14 @@ variable "tags" {
   description = "Tags for every resource."
   type        = map(string)
   default     = {}
+}
+
+variable "vault_kms_key_arn" {
+  description = "KMS key Vault uses for auto-unseal."
+  type        = string
+}
+
+variable "ecr_repository_arns" {
+  description = "ECR repositories whose signatures and attestations Kyverno verifies."
+  type        = list(string)
 }

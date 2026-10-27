@@ -17,10 +17,38 @@ components:
     clusterValues: |
       clusterName: {{ .Values.cluster.name }}
       nodeRole: {{ .Values.cluster.karpenterNodeRole }}
+  storage:
+    enabled: true
+    clusterValues: |
+      kmsKeyId: {{ .Values.cluster.kmsKeyArn }}
+  kyverno: { enabled: true }
+  policies:
+    enabled: true
+    clusterValues: |
+      images:
+        registry: {{ .Values.cluster.ecrRegistry }}
+      signature:
+        mode: keyless
+  vault-base: { enabled: true }
+  vault:
+    enabled: true
+    clusterValues: |
+      server:
+        extraEnvironmentVars:
+          VAULT_CACERT: /vault/userconfig/vault-server-tls/ca.crt
+          AWS_REGION: {{ .Values.cluster.region }}
+          VAULT_AWSKMS_SEAL_KEY_ID: {{ .Values.cluster.vaultKmsKeyId }}
+  vault-config:
+    enabled: true
+    clusterValues: |
+      database:
+        host: {{ .Values.cluster.dbHost }}
+        sslmode: require
   argo-rollouts: { enabled: true }
   metrics-server: { enabled: true }
   cert-manager: { enabled: true }
   external-secrets: { enabled: true }
+  prometheus-operator-crds: { enabled: true }
   kube-prometheus-stack: { enabled: true }
   aws-load-balancer-controller:
     enabled: true
@@ -47,13 +75,21 @@ components:
         email: {{ .Values.cluster.acmeEmail }}
         region: {{ .Values.cluster.region }}
         hostedZoneID: {{ .Values.cluster.hostedZoneId }}
-  fincore-base:
+  fincore-base: { enabled: true }
+  cde-base:
     enabled: true
     clusterValues: |
       database:
         host: {{ .Values.cluster.dbHost }}
         sslmode: require
         adminSecretKey: {{ .Values.cluster.dbAdminSecretName }}
+      networkPolicies:
+        database:
+          cidrs: {{ toJson .Values.cluster.databaseSubnetCidrs }}
+        queue:
+          cidrs: [{{ .Values.cluster.vpcCidr | quote }}]
+        ingressCidrs: {{ toJson .Values.cluster.publicSubnetCidrs }}
+        awsCredentialsCidrs: ["169.254.170.23/32"]
   ledger:
     enabled: true
     clusterValues: |
@@ -73,6 +109,8 @@ components:
         AWS_REGION: {{ .Values.cluster.region }}
       ingress:
         host: api.{{ .Values.cluster.domain }}
+        annotations:
+          alb.ingress.kubernetes.io/wafv2-acl-arn: {{ .Values.cluster.wafAclArn }}
   notifier:
     enabled: true
     clusterValues: |

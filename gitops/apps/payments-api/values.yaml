@@ -1,7 +1,7 @@
 nameOverride: payments-api
 replicas: 3
 env:
-  LEDGER_URL: http://ledger.fincore.svc.cluster.local:8080
+  LEDGER_URL: http://ledger.fincore-cde.svc.cluster.local:8080
   DB_NAME: payments
   DB_USER: payments
   DB_PORT: "5432"
@@ -22,3 +22,8 @@ autoscaling:
   maxReplicas: 12
 rollout:
   enabled: true
+# Cardholder-data zone: dedicated, tainted nodes only.
+nodeSelector:
+  fincore.io/node-role: cde
+tolerations:
+  - { key: fincore.io/zone, operator: Equal, value: cde, effect: NoSchedule }

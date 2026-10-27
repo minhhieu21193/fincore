@@ -10,11 +10,19 @@ components:
   metrics-server: { enabled: true }
   cert-manager: { enabled: true }
   external-secrets: { enabled: true }
+  prometheus-operator-crds: { enabled: true }
   kube-prometheus-stack: { enabled: true }
+  kyverno: { enabled: true }
+  local-kms: { enabled: true }
+  policies: { enabled: true }
+  vault-base: { enabled: true }
+  vault: { enabled: true }
+  vault-config: { enabled: true }
   secret-stores: { enabled: true }
   cluster-issuers: { enabled: true }
   local-infra: { enabled: true }
   fincore-base: { enabled: true }
+  cde-base: { enabled: true }
   ledger: { enabled: true }
   webhook-sink: { enabled: true }
   payments-api: { enabled: true }

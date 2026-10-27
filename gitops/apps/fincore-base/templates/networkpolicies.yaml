@@ -1,0 +1,202 @@
+{{- /*
+NetworkPolicies of a FinCore namespace.
+
+zone=cde (fincore-cde): default deny for ingress AND egress; every flow below
+  is an explicit, documented exception. This is the cardholder-data zone
+  boundary (docs/architecture.md).
+zone=app (fincore): default deny for ingress; egress stays open because the
+  notifier delivers webhooks to arbitrary merchant endpoints.
+
+Peers outside the cluster (AWS: Aurora, SQS VPC endpoints, the ALB) are CIDRs;
+on kind the same peers are pods in fincore-data, so either form is rendered.
+*/ -}}
+{{- if .Values.networkPolicies.enabled }}
+{{- $np := .Values.networkPolicies }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    {{- if eq .Values.zone "cde" }}
+    - Egress
+    {{- end }}
+---
+# Prometheus scrapes the metrics port of every FinCore service.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-metrics-scrape
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: fincore
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.monitoringNamespace }}
+      ports:
+        - { protocol: TCP, port: metrics }
+{{- if eq .Values.zone "cde" }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+# Entry into the zone: only the public API, only from its known callers.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: payments-api-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: payments-api
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.appNamespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: traffic-generator
+        {{- range $np.ingressCidrs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - { protocol: TCP, port: http }
+---
+# The ledger is reachable from payments-api and nothing else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ledger-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ledger
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: payments-api
+      ports:
+        - { protocol: TCP, port: http }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: payments-api-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: payments-api
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ledger
+      ports:
+        - { protocol: TCP, port: 8080 }
+    - to:
+        {{- include "fincore-base.peer" $np.database | nindent 8 }}
+      ports:
+        {{- include "fincore-base.port" $np.database | nindent 8 }}
+    - to:
+        {{- include "fincore-base.peer" $np.queue | nindent 8 }}
+      ports:
+        {{- include "fincore-base.port" $np.queue | nindent 8 }}
+    {{- with $np.awsCredentialsCidrs }}
+    # EKS Pod Identity agent (link-local, on the node): AWS credentials for SQS.
+    - to:
+        {{- range . }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - { protocol: TCP, port: 80 }
+    {{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ledger-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ledger
+  policyTypes: [Egress]
+  egress:
+    - to:
+        {{- include "fincore-base.peer" $np.database | nindent 8 }}
+      ports:
+        {{- include "fincore-base.port" $np.database | nindent 8 }}
+    # Vault Agent: authentication and dynamic database credentials.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.vaultNamespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
+        - { protocol: TCP, port: 8200 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-init-egress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: db-init
+  policyTypes: [Egress]
+  egress:
+    - to:
+        {{- include "fincore-base.peer" $np.database | nindent 8 }}
+      ports:
+        {{- include "fincore-base.port" $np.database | nindent 8 }}
+{{- else }}
+---
+# The demo merchant endpoint accepts webhooks from the notifier only.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: webhook-sink-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: webhook-sink
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: notifier
+      ports:
+        - { protocol: TCP, port: http }
+{{- end }}
+{{- end }}

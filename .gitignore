@@ -23,3 +23,4 @@ crash.log
 backend.hcl
 !backend.hcl.example
 .terraform.tfstate.lock.info
+policies/tests/policies.yaml

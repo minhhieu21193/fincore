@@ -1,0 +1,9 @@
+# kind: Kyverno fetches signatures from the local TLS registry, so it trusts the
+# local registry CA. scripts/kind-up.sh writes the system bundle plus that CA to
+# every node at this path.
+global:
+  caCertificates:
+    volume:
+      hostPath:
+        path: /etc/fincore/ca-certificates.crt
+        type: File

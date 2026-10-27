@@ -1,0 +1,18 @@
+# AnalysisRun of the aborted healthy release (attempt 1), captured from the cluster after the run
+# kubectl -n fincore-cde get analysisrun <name> -o json (metric results only)
+analysisrun payments-api-7bc8c995bd-2: Failed
+  success-rate: Successful
+    2026-10-27T15:23:09Z Successful value=[1]
+    2026-10-27T15:23:39Z Successful value=[1]
+    2026-10-27T15:24:09Z Successful value=[1]
+  latency-p95: Failed
+    2026-10-27T15:23:09Z Successful value=[0.19598970244418892]
+    2026-10-27T15:23:39Z Failed value=[4.109374999999998]
+    2026-10-27T15:24:09Z Failed value=[3.7031249999999947]
+
+# Prometheus, 15:22-15:26 UTC (same minute as the abort), captured after the run
+payments-api p95 by revision (69555c57b4 = stable, 7bc8c995bd = canary): histogram_quantile(0.95, sum by (le, rollouts_pod_template_hash) (rate(http_request_duration_seconds_bucket{namespace="fincore-cde",app="payments-api",route="POST /v1/payments"}[1m])))
+  rollouts_pod_template_hash=69555c57b4: 15:22:00=178ms 15:22:20=196ms 15:22:40=198ms 15:23:00=215ms 15:23:20=3074ms 15:23:40=4881ms 15:24:00=4880ms 15:24:20=3590ms 15:24:40=373ms 15:25:00=253ms 15:25:20=150ms 15:25:40=151ms 15:26:00=171ms
+  rollouts_pod_template_hash=7bc8c995bd: 15:22:40=198ms 15:23:00=199ms 15:23:20=2500ms 15:23:40=4109ms 15:24:00=4482ms 15:24:20=2275ms 15:24:40=625ms 15:25:00=594ms
+ledger p95: histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket{namespace="fincore-cde",app="ledger",route!~"GET /(healthz|readyz)"}[1m])))
+  : 15:22:00=23ms 15:22:20=42ms 15:22:40=41ms 15:23:00=41ms 15:23:20=825ms 15:23:40=1393ms 15:24:00=2099ms 15:24:20=1225ms 15:24:40=102ms 15:25:00=70ms 15:25:20=18ms 15:25:40=16ms 15:26:00=21ms

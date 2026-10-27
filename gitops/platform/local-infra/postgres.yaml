@@ -66,14 +66,15 @@ spec:
           ports:
             - name: postgres
               containerPort: 5432
+          # TCP probes: cheap for the kubelet (no process per check).
           readinessProbe:
-            exec:
-              command: ["pg_isready", "-U", "postgres", "-h", "127.0.0.1"]
+            tcpSocket: { port: postgres }
             periodSeconds: 5
+            timeoutSeconds: 3
           livenessProbe:
-            exec:
-              command: ["pg_isready", "-U", "postgres", "-h", "127.0.0.1"]
+            tcpSocket: { port: postgres }
             periodSeconds: 15
+            timeoutSeconds: 5
             failureThreshold: 6
           resources:
             requests: { cpu: 100m, memory: 256Mi }

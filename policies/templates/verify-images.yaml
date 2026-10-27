@@ -1,0 +1,69 @@
+{{- $s := .Values.signature -}}
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: verify-fincore-images
+  annotations:
+    policies.kyverno.io/title: Signed images with an SBOM
+    policies.kyverno.io/description: >-
+      FinCore images must carry a valid cosign signature from our release
+      pipeline and a signed SPDX SBOM attestation. The tag is resolved to the
+      verified digest at admission, so it cannot be swapped afterwards.
+spec:
+  validationActions: [Deny]
+  failurePolicy: Fail
+  webhookConfiguration:
+    # Kubernetes maximum: verification fetches signatures and the SBOM
+    # attestation from the registry, twice per request (mutate + validate).
+    timeoutSeconds: 30
+  evaluation:
+    background:
+      enabled: false
+  {{- include "policies.matchEnforcedPods" . | nindent 2 }}
+  autogen:
+    podControllers:
+      controllers: []
+  matchImageReferences:
+    - glob: {{ printf "%s/%s*" .Values.images.registry .Values.images.repositoryPrefix | quote }}
+  validationConfigurations:
+    mutateDigest: true
+    verifyDigest: true
+    required: true
+  {{- if eq $s.mode "key" }}
+  variables:
+    - name: publicKey
+      expression: >-
+        resource.Get("v1", "configmaps", {{ squote $s.key.configMap.namespace }}, {{ squote $s.key.configMap.name }}).data[{{ squote $s.key.configMap.key }}]
+  attestors:
+    - name: fincore
+      cosign:
+        key:
+          expression: variables.publicKey
+        # Local signatures are not recorded in a transparency log.
+        ctlog:
+          insecureIgnoreTlog: true
+          insecureIgnoreSCT: true
+  {{- else if eq $s.mode "keyless" }}
+  attestors:
+    - name: fincore
+      cosign:
+        keyless:
+          identities:
+            - issuer: {{ $s.keyless.issuer | quote }}
+              subjectRegExp: {{ $s.keyless.subjectRegExp | quote }}
+        ctlog:
+          url: {{ $s.keyless.rekorURL | quote }}
+  {{- else }}
+  {{- fail "signature.mode must be key or keyless" }}
+  {{- end }}
+  attestations:
+    - name: sbom
+      intoto:
+        type: {{ $s.sbomPredicateType | quote }}
+  validations:
+    - expression: >-
+        images.containers.map(image, verifyImageSignatures(image, [attestors.fincore])).all(n, n > 0)
+      message: image is not signed by the FinCore release pipeline
+    - expression: >-
+        images.containers.map(image, verifyAttestationSignatures(image, attestations.sbom, [attestors.fincore])).all(n, n > 0)
+      message: image has no signed SBOM attestation (SPDX)

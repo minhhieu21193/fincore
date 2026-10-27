@@ -43,9 +43,11 @@ applicationSet:
     limits: { memory: 128Mi }
 
 controller:
+  # The controller caches every watched resource type; Kyverno's CRDs (Phase 2)
+  # pushed it past 768Mi.
   resources:
-    requests: { cpu: 100m, memory: 256Mi }
-    limits: { memory: 768Mi }
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { memory: 1536Mi }
 repoServer:
   resources:
     requests: { cpu: 50m, memory: 128Mi }

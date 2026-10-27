@@ -82,8 +82,8 @@ variable "eks_addon_versions" {
   description = <<-EOT
     Pinned EKS add-on versions for kubernetes_version. vpc-cni, coredns and kube-proxy
     defaults are the versions the EKS user guide lists for 1.36 (checked 2026-10-26).
-    eks-pod-identity-agent has no published table: look it up with
-    `aws eks describe-addon-versions --addon-name eks-pod-identity-agent --kubernetes-version 1.36`.
+    eks-pod-identity-agent and aws-ebs-csi-driver have no published table: look them up with
+    `aws eks describe-addon-versions --addon-name <name> --kubernetes-version 1.36`.
   EOT
   type        = map(string)
 }
@@ -143,4 +143,16 @@ variable "budget_account_usd" {
 variable "budget_alert_emails" {
   description = "Budget alert recipients."
   type        = list(string)
+}
+
+variable "waf_rate_limit_per_5min" {
+  description = "Requests per client IP per 5 minutes before AWS WAF blocks it."
+  type        = number
+  default     = 2000
+}
+
+variable "audit_force_destroy" {
+  description = "Let terraform destroy the CloudTrail bucket with its logs (one-day demo account only)."
+  type        = bool
+  default     = false
 }

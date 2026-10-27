@@ -1,0 +1,29 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-non-root
+  annotations:
+    policies.kyverno.io/title: Containers must not run as root
+    policies.kyverno.io/description: >-
+      Every container must run with runAsNonRoot=true and must not request UID 0,
+      set on the pod or the container.
+spec:
+  {{- include "policies.common" . | nindent 2 }}
+  {{- include "policies.matchEnforcedPods" . | nindent 2 }}
+  variables:
+    {{- include "policies.containersVariable" . | nindent 4 }}
+    - name: podNonRoot
+      expression: object.spec.?securityContext.?runAsNonRoot.orValue(false)
+    - name: podUser
+      expression: object.spec.?securityContext.?runAsUser.orValue(-1)
+    - name: offenders
+      expression: >-
+        variables.containers.filter(c,
+          !c.?securityContext.?runAsNonRoot.orValue(variables.podNonRoot) ||
+          c.?securityContext.?runAsUser.orValue(variables.podUser) == 0
+        ).map(c, c.name)
+  validations:
+    - expression: size(variables.offenders) == 0
+      messageExpression: >-
+        'root containers are not allowed (runAsNonRoot must be true and runAsUser must not be 0): ' +
+        variables.offenders.join(', ')

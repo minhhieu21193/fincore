@@ -8,7 +8,7 @@
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
-need git yq kubectl
+need git yq kubectl jq
 
 [[ $# -ge 2 ]] || die "usage: $0 <image> <tag> [--fault-rate R]"
 IMAGE="$1" TAG="$2"; shift 2
@@ -17,6 +17,9 @@ FAULT_RATE=0
 VALUES="$ROOT/gitops/envs/kind/values/$IMAGE.yaml"
 [[ -f "$VALUES" ]] || die "no kind values for $IMAGE"
 [[ -z "$(git -C "$ROOT" status --porcelain)" ]] || die "working tree not clean: Argo CD deploys commits, so commit or stash first"
+
+# One canary at a time (see wait_rollouts_settled in lib.sh); wait up to 15 min.
+wait_rollouts_settled 900
 
 "$ROOT/scripts/build-images.sh" --only "$IMAGE" --tag "$TAG" --fault-rate "$FAULT_RATE"
 yq -i ".image.tag = \"$TAG\"" "$VALUES"

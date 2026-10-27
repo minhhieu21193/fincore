@@ -1,4 +1,7 @@
+{{- if .Values.dbInit.enabled }}
 {{- $db := .Values.database -}}
+{{- $vaultServices := list -}}
+{{- range $db.services }}{{ if eq .credentials "vault" }}{{ $vaultServices = append $vaultServices .name }}{{ end }}{{ end -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -6,17 +9,19 @@ metadata:
 data:
   init.sh: |
     #!/bin/sh
-    # Idempotent: creates/updates one login role and one database per service.
-    # Works with a real superuser (kind) and with Aurora's rds_superuser.
+    # Idempotent: one owner role and one database per service. Works with a real
+    # superuser (kind) and with Aurora's rds_superuser.
+    #   credentials=static  the role logs in with a password from Secrets Manager
+    #                       (re-applied on every sync, so rotations take effect)
+    #   credentials=vault   the role is NOLOGIN; Vault creates short-lived login
+    #                       roles IN ROLE <service> (see gitops/platform/vault-config)
     set -eu
     until pg_isready -q; do echo "waiting for database"; sleep 2; done
-    for svc in {{ join " " $db.services }}; do
-      pw_var="$(echo "$svc" | tr '[:lower:]' '[:upper:]')_DB_PASSWORD"
-      eval "pw=\${$pw_var}"
-      psql -v ON_ERROR_STOP=1 -v svc="$svc" -v pw="$pw" <<'SQL'
-    SELECT format('CREATE ROLE %I LOGIN', :'svc')
+    setup() { # service mode
+      svc="$1" mode="$2"
+      psql -v ON_ERROR_STOP=1 -v svc="$svc" <<'SQL'
+    SELECT format('CREATE ROLE %I NOLOGIN', :'svc')
      WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'svc') \gexec
-    ALTER ROLE :"svc" WITH LOGIN PASSWORD :'pw';
     -- PG16+: the creating role needs membership to create a database owned by it.
     SELECT format('GRANT %I TO CURRENT_USER', :'svc')
      WHERE NOT pg_has_role(CURRENT_USER, :'svc', 'MEMBER') \gexec
@@ -24,8 +29,41 @@ data:
      WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'svc') \gexec
     REVOKE ALL ON DATABASE :"svc" FROM PUBLIC;
     SQL
-      echo "database $svc ready"
-    done
+      if [ "$mode" = static ]; then
+        pw_var="$(echo "$svc" | tr '[:lower:]' '[:upper:]')_DB_PASSWORD"
+        eval "pw=\${$pw_var}"
+        psql -v ON_ERROR_STOP=1 -q -v svc="$svc" -v pw="$pw" <<'SQL'
+    ALTER ROLE :"svc" WITH LOGIN PASSWORD :'pw';
+    SQL
+      else
+        # Nobody logs in as the owner role itself.
+        psql -v ON_ERROR_STOP=1 -q -v svc="$svc" <<'SQL'
+    ALTER ROLE :"svc" WITH NOLOGIN PASSWORD NULL;
+    SQL
+      fi
+      echo "database $svc ready (credentials: $mode)"
+    }
+    {{- range $db.services }}
+    setup {{ .name }} {{ .credentials }}
+    {{- end }}
+    {{- if $vaultServices }}
+    # Vault's database admin: may create roles and grant membership in the
+    # Vault-managed owner roles, nothing else. The password is set only when the
+    # role is created; Vault rotates it immediately (rotate-root) and from then
+    # on only Vault knows it, so it is deliberately never reset here.
+    psql -v ON_ERROR_STOP=1 -v admin={{ $db.vaultAdmin.role }} -v pw="$VAULT_ADMIN_PASSWORD" <<'SQL'
+    SELECT format('CREATE ROLE %I WITH LOGIN CREATEROLE PASSWORD %L', :'admin', :'pw')
+     WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'admin') \gexec
+    -- Revocation terminates the expired user's remaining sessions.
+    GRANT pg_signal_backend TO :"admin";
+    SQL
+    {{- range $vaultServices }}
+    psql -v ON_ERROR_STOP=1 -q -v admin={{ $db.vaultAdmin.role }} -v svc={{ . }} <<'SQL'
+    GRANT :"svc" TO :"admin" WITH ADMIN OPTION;
+    SQL
+    {{- end }}
+    echo "vault admin role {{ $db.vaultAdmin.role }} ready"
+    {{- end }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -40,6 +78,10 @@ spec:
   activeDeadlineSeconds: 600
   ttlSecondsAfterFinished: 3600
   template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: db-init
+        app.kubernetes.io/part-of: fincore
     spec:
       restartPolicy: OnFailure
       automountServiceAccountToken: false
@@ -48,6 +90,14 @@ spec:
         runAsUser: 70
         runAsGroup: 70
         seccompProfile: { type: RuntimeDefault }
+      {{- with .Values.dbInit.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dbInit.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: db-init
           image: {{ .Values.dbInit.image }}
@@ -61,10 +111,16 @@ spec:
               valueFrom: { secretKeyRef: { name: db-admin, key: username } }
             - name: PGPASSWORD
               valueFrom: { secretKeyRef: { name: db-admin, key: password } }
-            - name: PAYMENTS_DB_PASSWORD
-              valueFrom: { secretKeyRef: { name: payments-db, key: password } }
-            - name: LEDGER_DB_PASSWORD
-              valueFrom: { secretKeyRef: { name: ledger-db, key: password } }
+            {{- range $db.services }}
+            {{- if eq .credentials "static" }}
+            - name: {{ upper .name }}_DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .name }}-db, key: password } }
+            {{- end }}
+            {{- end }}
+            {{- if $vaultServices }}
+            - name: VAULT_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: vault-db-admin, key: password } }
+            {{- end }}
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { memory: 64Mi }
@@ -80,3 +136,4 @@ spec:
           configMap: { name: db-init }
         - name: tmp
           emptyDir: {}
+{{- end }}

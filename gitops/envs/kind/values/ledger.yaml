@@ -1,7 +1,12 @@
 image:
-  repository: fincore/ledger
+  repository: fincore-registry:5000/fincore/ledger
   tag: 0.1.0
-  pullPolicy: Never
+  pullPolicy: IfNotPresent
 env:
   DB_HOST: postgres.fincore-data.svc.cluster.local
   DB_SSLMODE: disable
+  # Vault-issued users live 3 minutes on kind (demo) and Vault Agent renders the
+  # next one ~40s before expiry; connections are recycled within ~20s of that
+  # (15s lifetime + 10% jitter + 2s health check), well before revocation.
+  DB_MAX_CONN_LIFETIME: 15s
+  DB_HEALTH_CHECK_PERIOD: 2s

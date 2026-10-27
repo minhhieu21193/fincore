@@ -34,10 +34,27 @@ module "eks" {
   }
 
   addons = {
-    vpc-cni                = { before_compute = true, addon_version = var.addon_versions["vpc-cni"] }
+    vpc-cni = {
+      before_compute = true
+      addon_version  = var.addon_versions["vpc-cni"]
+      # Enforce Kubernetes NetworkPolicies (the cardholder-data zone boundary).
+      # "standard" enforcing mode: a new pod is allowed until its policies are
+      # programmed (about a second). Strict mode closes that window but denies
+      # every pod without a policy cluster-wide, so it needs policies for all
+      # platform namespaces first (see docs/compliance-mapping.md, gaps).
+      configuration_values = jsonencode({ enableNetworkPolicy = "true" })
+    }
     eks-pod-identity-agent = { before_compute = true, addon_version = var.addon_versions["eks-pod-identity-agent"] }
     kube-proxy             = { addon_version = var.addon_versions["kube-proxy"] }
     coredns                = { addon_version = var.addon_versions["coredns"] }
+    # Persistent volumes (Vault's Raft storage).
+    aws-ebs-csi-driver = {
+      addon_version = var.addon_versions["aws-ebs-csi-driver"]
+      pod_identity_association = [{
+        role_arn        = module.ebs_csi_pod_identity.iam_role_arn
+        service_account = "ebs-csi-controller-sa"
+      }]
+    }
   }
 
   eks_managed_node_groups = {
@@ -52,6 +69,8 @@ module "eks" {
       labels = {
         "fincore.io/node-role" = "system"
       }
+      # Vault runs here; this group is one of the two that Aurora admits.
+      vpc_security_group_ids = [aws_security_group.system_nodes.id]
       metadata_options = {
         http_endpoint               = "enabled"
         http_tokens                 = "required"
@@ -104,7 +123,101 @@ module "karpenter" {
 }
 
 # ---------------------------------------------------------------------------
+# Node security groups that mark where database clients may run. They carry no
+# rules of their own (cluster traffic is governed by the shared node group);
+# Aurora admits exactly these two.
+
+resource "aws_security_group" "cde_nodes" {
+  #checkov:skip=CKV2_AWS_5:Attached to cardholder-data-zone nodes by Karpenter's EC2NodeClass "cde" (selected by tag)
+  name        = "${var.name}-cde-nodes"
+  description = "Cardholder-data-zone nodes (Karpenter NodePool cde)"
+  vpc_id      = var.vpc_id
+  tags        = merge(var.tags, { Name = "${var.name}-cde-nodes", "fincore.io/security-group" = "cde" })
+}
+
+resource "aws_security_group" "system_nodes" {
+  #checkov:skip=CKV2_AWS_5:Attached to the system managed node group through the EKS module (vpc_security_group_ids)
+  name        = "${var.name}-system-nodes"
+  description = "System node group (cluster controllers and Vault)"
+  vpc_id      = var.vpc_id
+  tags        = merge(var.tags, { Name = "${var.name}-system-nodes" })
+}
+
+# ---------------------------------------------------------------------------
 # Pod Identity: one role per in-cluster AWS client, least privilege.
+
+module "ebs_csi_pod_identity" {
+  source  = "terraform-aws-modules/eks-pod-identity/aws"
+  version = "2.10.0"
+
+  name                      = "${var.name}-ebs-csi"
+  attach_aws_ebs_csi_policy = true
+  aws_ebs_csi_kms_arns      = [var.kms_key_arn]
+  tags                      = var.tags
+}
+
+# Vault auto-unseal: the dedicated key only, and only the three calls the seal makes.
+data "aws_iam_policy_document" "vault" {
+  statement {
+    sid       = "AutoUnseal"
+    actions   = ["kms:Encrypt", "kms:Decrypt", "kms:DescribeKey"]
+    resources = [var.vault_kms_key_arn]
+  }
+}
+
+module "vault_pod_identity" {
+  source  = "terraform-aws-modules/eks-pod-identity/aws"
+  version = "2.10.0"
+
+  name                    = "${var.name}-vault"
+  attach_custom_policy    = true
+  source_policy_documents = [data.aws_iam_policy_document.vault.json]
+  associations = {
+    this = {
+      cluster_name    = module.eks.cluster_name
+      namespace       = "vault"
+      service_account = "vault"
+    }
+  }
+  tags = var.tags
+}
+
+# Kyverno reads image signatures and SBOM attestations from ECR.
+data "aws_iam_policy_document" "kyverno" {
+  statement {
+    sid       = "EcrAuth"
+    actions   = ["ecr:GetAuthorizationToken"]
+    resources = ["*"]
+  }
+  statement {
+    sid = "ReadSignatures"
+    actions = [
+      "ecr:BatchGetImage",
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:DescribeImages",
+      "ecr:ListImages",
+    ]
+    resources = var.ecr_repository_arns
+  }
+}
+
+module "kyverno_pod_identity" {
+  source  = "terraform-aws-modules/eks-pod-identity/aws"
+  version = "2.10.0"
+
+  name                    = "${var.name}-kyverno"
+  attach_custom_policy    = true
+  source_policy_documents = [data.aws_iam_policy_document.kyverno.json]
+  associations = {
+    this = {
+      cluster_name    = module.eks.cluster_name
+      namespace       = "kyverno"
+      service_account = "kyverno-admission-controller"
+    }
+  }
+  tags = var.tags
+}
 
 module "aws_lb_controller_pod_identity" {
   source  = "terraform-aws-modules/eks-pod-identity/aws"
@@ -198,7 +311,7 @@ module "payments_api_pod_identity" {
   associations = {
     this = {
       cluster_name    = module.eks.cluster_name
-      namespace       = "fincore"
+      namespace       = "fincore-cde"
       service_account = "payments-api"
     }
   }

@@ -1,0 +1,29 @@
+==> ledger pods (TTL of Vault-issued database users: 3m)
+   ledger-68d958d645-h7wgs  containers=app,vault-agent  restarts=0
+   ledger-68d958d645-sc5bs  containers=app,vault-agent  restarts=0
+   rollout.argoproj.io/ledger
+   static ledger password in the cluster: none
+   ledger owner role can log in: f
+==> watching PostgreSQL while the traffic generator keeps posting payments
+   [  0s] connected as: v-kubernet-ledger-A4v4QZSAvEUBDrvnoTNF-1793114280(2 conns) v-kubernet-ledger-qdd9vWhVrKu89y9NANac-1793114288(1 conns) | users in pg_roles: 2 | revoked so far: 0
+   [  6s] connected as: v-kubernet-ledger-A4v4QZSAvEUBDrvnoTNF-1793114280(1 conns) v-kubernet-ledger-qdd9vWhVrKu89y9NANac-1793114288(1 conns) | users in pg_roles: 2 | revoked so far: 0
+   [ 11s] connected as: v-kubernet-ledger-A4v4QZSAvEUBDrvnoTNF-1793114280(1 conns) v-kubernet-ledger-qdd9vWhVrKu89y9NANac-1793114288(2 conns) | users in pg_roles: 3 | revoked so far: 0
+   [ 22s] connected as: v-kubernet-ledger-Vp38QHpntWSpWmIQmYW4-1793114411(1 conns) v-kubernet-ledger-qdd9vWhVrKu89y9NANac-1793114288(2 conns) | users in pg_roles: 4 | revoked so far: 0
+   [ 27s] connected as: v-kubernet-ledger-M8Nnfpd6DeEFNDKasHv7-1793114419(1 conns) v-kubernet-ledger-Vp38QHpntWSpWmIQmYW4-1793114411(1 conns) | users in pg_roles: 4 | revoked so far: 0
+ ✔ every pod moved to a new Vault-issued user and 2 expired user(s) were dropped (70s)
+==> the same pods kept running
+   pods before: ledger-68d958d645-h7wgs ledger-68d958d645-sc5bs (restarts 0)
+   pods after:  ledger-68d958d645-h7wgs ledger-68d958d645-sc5bs (restarts 0)
+ ✔ no restart, no replacement
+   ledger-68d958d645-h7wgs: database credentials rotated: v-kubernet-ledger-qdd9vWhVrKu89y9NANac-1793114288 -> v-kubernet-ledger-M8Nnfpd6DeEFNDKasHv7-1793114419
+   ledger-68d958d645-sc5bs: database credentials rotated: v-kubernet-ledger-A4v4QZSAvEUBDrvnoTNF-1793114280 -> v-kubernet-ledger-Vp38QHpntWSpWmIQmYW4-1793114411
+==> no errors during the rotation (Prometheus, last 100s)
+   ledger        requests=940  5xx=0
+   payments-api  requests=980  5xx=0
+   fincore_db_credential_changes_total increase: 2
+ ✔ traffic flowed and nothing failed
+==> Vault audit log: credentials issued to the ledger during the window
+   2026-10-27T15:20:11.727970757Z  fincore-cde/ledger  read database/creds/ledger  lease Xd69ni2zC3uMNwGRjkrhfx9P
+   2026-10-27T15:20:19.78424172Z  fincore-cde/ledger  read database/creds/ledger  lease gtP5kxLrfosp7j7bqO2YcnIf
+
+ ✔ DEMO PASSED: the ledger's database credentials rotated under load without a restart

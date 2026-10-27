@@ -1,0 +1,6 @@
+# AWS: highly available admission (policies fail closed in FinCore namespaces),
+# on the system nodes. ECR is read through EKS Pod Identity (amazon credential helper).
+admissionController:
+  replicas: 3
+  nodeSelector:
+    fincore.io/node-role: system

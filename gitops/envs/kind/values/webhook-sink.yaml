@@ -1,4 +1,4 @@
 image:
-  repository: fincore/webhook-sink
+  repository: fincore-registry:5000/fincore/webhook-sink
   tag: 0.1.0
-  pullPolicy: Never
+  pullPolicy: IfNotPresent

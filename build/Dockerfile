@@ -11,6 +11,8 @@ ARG CMD=${SERVICE}
 ARG VERSION=dev
 ARG COMMIT=unknown
 ARG FAULT_RATE=0
+# Go package to build; defaults to the service command.
+ARG PKG=./services/${SERVICE}/cmd/${CMD}
 ARG TARGETOS
 ARG TARGETARCH
 WORKDIR /src
@@ -18,6 +20,7 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY internal ./internal
 COPY services ./services
+COPY tools ./tools
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     test -n "$SERVICE" && \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
@@ -25,7 +28,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
         -X github.com/minhhieu21193/fincore/internal/platform/buildinfo.Version=${VERSION} \
         -X github.com/minhhieu21193/fincore/internal/platform/buildinfo.Commit=${COMMIT} \
         -X github.com/minhhieu21193/fincore/internal/platform/buildinfo.FaultRate=${FAULT_RATE}" \
-      -o /out/app ./services/${SERVICE}/cmd/${CMD}
+      -o /out/app ${PKG}
 
 FROM gcr.io/distroless/static-debian13:nonroot@sha256:18f4cc26c9ffa7f20a359298be7deadac5c607c8e03a02b8119f1a5fc2f82c99
 COPY --from=build /out/app /app

@@ -11,7 +11,7 @@ source "$(dirname "$0")/lib.sh"
 need kubectl jq git yq
 KEEP=0; [[ "${1:-}" == "--keep" ]] && KEEP=1
 
-ro() { kubectl -n fincore get rollout payments-api -o json; }
+ro() { kubectl -n $NS_CDE get rollout payments-api -o json; }
 [[ "$(ro | jq -r .status.phase)" == Healthy ]] || die "payments-api rollout must be Healthy before the demo"
 
 STABLE_TAG="$(kind_tag payments-api)"
@@ -22,7 +22,7 @@ T0=$SECONDS
 "$ROOT/scripts/deploy-kind.sh" payments-api "$NEW_TAG"
 RELEASE_COMMIT="$(git -C "$ROOT" rev-parse HEAD)"
 
-wait_for "canary ReplicaSet" 180 bash -c "[[ \$(kubectl -n fincore get rollout payments-api -o jsonpath='{.status.currentPodHash}') != '$STABLE_HASH' ]]"
+wait_for "canary ReplicaSet" 180 bash -c "[[ \$(kubectl -n $NS_CDE get rollout payments-api -o jsonpath='{.status.currentPodHash}') != '$STABLE_HASH' ]]"
 CANARY_HASH="$(ro | jq -r .status.currentPodHash)"
 ok "canary started after $(( SECONDS - T0 ))s (hash $CANARY_HASH)"
 
@@ -40,7 +40,7 @@ while :; do
 done
 ok "promoted to 100% after ${T_DONE}s"
 
-AR="$(kubectl -n fincore get analysisrun -l rollouts-pod-template-hash="$CANARY_HASH" -o json | jq -r '.items | sort_by(.metadata.creationTimestamp) | last')"
+AR="$(kubectl -n $NS_CDE get analysisrun -l rollouts-pod-template-hash="$CANARY_HASH" -o json | jq -r '.items | sort_by(.metadata.creationTimestamp) | last')"
 echo "   AnalysisRun $(jq -r .metadata.name <<<"$AR"): $(jq -r .status.phase <<<"$AR")"
 jq -r '.status.metricResults[] | "     \(.name): \(.phase) — \([.measurements[] | "\(.phase):\(.value)"] | join(", "))"' <<<"$AR"
 PASSED="$(jq '[.status.metricResults[] | .measurements[] | select(.phase == "Successful")] | length' <<<"$AR")"
@@ -51,7 +51,7 @@ if [[ $KEEP == 0 ]]; then
   log "reverting the release commit (rollbackWindow: immediate switch back)"
   git -C "$ROOT" revert --no-edit "$RELEASE_COMMIT" >/dev/null
   kubectl -n argocd annotate application payments-api argocd.argoproj.io/refresh=normal --overwrite >/dev/null
-  wait_for "rollout back on $STABLE_HASH" 300 bash -c "s=\$(kubectl -n fincore get rollout payments-api -o json); [[ \$(jq -r .status.phase <<<\"\$s\") == Healthy && \$(jq -r .status.stableRS <<<\"\$s\") == '$STABLE_HASH' ]]"
+  wait_for "rollout back on $STABLE_HASH" 300 bash -c "s=\$(kubectl -n $NS_CDE get rollout payments-api -o json); [[ \$(jq -r .status.phase <<<\"\$s\") == Healthy && \$(jq -r .status.stableRS <<<\"\$s\") == '$STABLE_HASH' ]]"
   ok "back on payments-api:$STABLE_TAG"
 fi
 echo

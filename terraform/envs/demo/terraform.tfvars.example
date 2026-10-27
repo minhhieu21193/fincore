@@ -11,6 +11,7 @@ eks_addon_versions = {
   "coredns"                = "v1.14.3-eksbuild.16"
   "kube-proxy"             = "v1.36.0-eksbuild.21"
   "eks-pod-identity-agent" = "REPLACE_ME" # aws eks describe-addon-versions --addon-name eks-pod-identity-agent --kubernetes-version 1.36
+  "aws-ebs-csi-driver"     = "REPLACE_ME" # aws eks describe-addon-versions --addon-name aws-ebs-csi-driver --kubernetes-version 1.36
 }
 
 budget_alert_emails = ["ops@example.com"]

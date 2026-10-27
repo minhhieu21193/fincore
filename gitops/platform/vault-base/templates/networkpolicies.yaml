@@ -1,0 +1,35 @@
+# Vault answers only its clients, its peers and Prometheus. The injector's
+# webhook is called by the API server, whose source address is not a pod.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vault-server-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vault
+      component: server
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}   # Vault peers, the configuration job, operators' exec
+        {{- range .Values.clientNamespaces }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+        {{- end }}
+      ports:
+        - { protocol: TCP, port: 8200 }
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+              component: server
+      ports:
+        - { protocol: TCP, port: 8201 }
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.monitoringNamespace }}
+      ports:
+        - { protocol: TCP, port: 8200 }

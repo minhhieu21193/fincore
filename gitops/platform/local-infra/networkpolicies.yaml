@@ -1,0 +1,54 @@
+# kind stand-ins for Aurora and SQS. On AWS the same boundary is enforced by
+# security groups (Aurora admits only the CDE and Vault node groups).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: fincore-data
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# PostgreSQL: the cardholder-data zone and Vault (which creates the dynamic users).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-ingress
+  namespace: fincore-data
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: postgres }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: fincore-cde }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: vault }
+          podSelector:
+            matchLabels: { app.kubernetes.io/name: vault }
+      ports:
+        - { protocol: TCP, port: 5432 }
+---
+# Queue: payments-api publishes (zone), the notifier consumes (outside the zone).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: elasticmq-ingress
+  namespace: fincore-data
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: elasticmq }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: fincore-cde }
+          podSelector:
+            matchLabels: { app.kubernetes.io/name: payments-api }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: fincore }
+          podSelector:
+            matchLabels: { app.kubernetes.io/name: notifier }
+      ports:
+        - { protocol: TCP, port: 9324 }

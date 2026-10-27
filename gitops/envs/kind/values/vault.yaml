@@ -1,0 +1,26 @@
+# kind: auto-unseal against the local-kms emulator (gitops/platform/local-kms).
+# The credentials are placeholders the emulator ignores; they are not secrets.
+server:
+  extraEnvironmentVars:
+    AWS_KMS_ENDPOINT: http://local-kms.vault.svc.cluster.local:8080
+    VAULT_AWSKMS_SEAL_KEY_ID: alias/fincore-vault-unseal
+    AWS_ACCESS_KEY_ID: local
+    AWS_SECRET_ACCESS_KEY: local
+  resources:
+    requests: { cpu: 25m, memory: 96Mi }
+    limits: { memory: 192Mi }
+  dataStorage:
+    size: 1Gi
+  # Two general-purpose workers on kind: still three Raft voters, spread where
+  # possible. On AWS the anti-affinity stays required (one node per replica).
+  affinity: |
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: {{ template "vault.name" . }}
+                app.kubernetes.io/instance: "{{ .Release.Name }}"
+                component: server
+            topologyKey: kubernetes.io/hostname

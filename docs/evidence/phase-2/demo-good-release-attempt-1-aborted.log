@@ -1,0 +1,10 @@
+==> stable: payments-api:0.1.1 (69555c57b4) -> releasing healthy build payments-api:0.1.1-rc.1793114497
+ ✔ built fincore/payments-api:0.1.1-rc.1793114497 (fault_rate=0)
+ ✔ published fincore-registry:5000/fincore/payments-api:0.1.1-rc.1793114497 (signed, SBOM attested (60 packages))
+ ✔ committed: deploy(kind): payments-api 0.1.1-rc.1793114497 (bf201bc)
+ ✔ canary started after 28s (hash 7bc8c995bd)
+   [ 28s] phase=Progressing step=0/6 weight=- analysis=-
+   [ 33s] phase=Paused step=1/6 weight=- analysis=Running
+   [127s] phase=Paused step=3/6 weight=- analysis=Running
+   [154s] phase=Degraded step=0/6 weight=- analysis=-
+ ✘ healthy build was ABORTED: RolloutAborted: Rollout aborted update to revision 2: Background analysis phase error/failed: Metric "latency-p95" assessed Failed due to failed (2) > failureLimit (1)

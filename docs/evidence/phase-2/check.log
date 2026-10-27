@@ -1,0 +1,127 @@
+test database ready on :55432
+scripts/check.sh --all
+==> go vet
+ ✔ go vet
+==> go test (race, with PostgreSQL)
+?   	github.com/minhhieu21193/fincore/internal/platform/buildinfo	[no test files]
+?   	github.com/minhhieu21193/fincore/internal/platform/config	[no test files]
+ok  	github.com/minhhieu21193/fincore/internal/platform/httpx	2.270s
+?   	github.com/minhhieu21193/fincore/internal/platform/logging	[no test files]
+?   	github.com/minhhieu21193/fincore/internal/platform/migrate	[no test files]
+ok  	github.com/minhhieu21193/fincore/internal/platform/pg	4.508s
+?   	github.com/minhhieu21193/fincore/internal/platform/pgtest	[no test files]
+?   	github.com/minhhieu21193/fincore/internal/platform/queue	[no test files]
+?   	github.com/minhhieu21193/fincore/internal/platform/telemetry	[no test files]
+?   	github.com/minhhieu21193/fincore/services/ledger/cmd/ledger	[no test files]
+ok  	github.com/minhhieu21193/fincore/services/ledger/internal/ledger	7.509s
+?   	github.com/minhhieu21193/fincore/services/notifier/cmd/notifier	[no test files]
+?   	github.com/minhhieu21193/fincore/services/notifier/cmd/webhook-sink	[no test files]
+ok  	github.com/minhhieu21193/fincore/services/notifier/internal/notifier	2.861s
+ok  	github.com/minhhieu21193/fincore/services/notifier/internal/signature	5.151s
+?   	github.com/minhhieu21193/fincore/services/payments-api/cmd/payments-api	[no test files]
+ok  	github.com/minhhieu21193/fincore/services/payments-api/internal/payments	8.822s
+?   	github.com/minhhieu21193/fincore/tools/gitserver	[no test files]
+?   	github.com/minhhieu21193/fincore/tools/netprobe	[no test files]
+ ✔ go test (race, with PostgreSQL)
+==> golangci-lint
+0 issues.
+ ✔ golangci-lint
+==> terraform fmt
+ ✔ terraform fmt
+==> terraform validate
+Success! The configuration is valid.
+
+Success! The configuration is valid.
+
+ ✔ terraform validate
+==> tflint
+ ✔ tflint
+==> checkov
+terraform scan results:
+
+Passed checks: 286, Failed checks: 0, Skipped checks: 25
+
+
+terraform scan results:
+
+Passed checks: 572, Failed checks: 0, Skipped checks: 50
+
+dockerfile scan results:
+
+Passed checks: 134, Failed checks: 0, Skipped checks: 2
+
+
+terraform scan results:
+
+Passed checks: 858, Failed checks: 0, Skipped checks: 75
+
+dockerfile scan results:
+
+Passed checks: 268, Failed checks: 0, Skipped checks: 4
+
+github_actions scan results:
+
+Passed checks: 180, Failed checks: 0, Skipped checks: 0
+
+
+ ✔ checkov
+==> helm lint
+ ✔ helm lint
+==> kubeconform (kind + aws, rendered as Argo CD would)
+generated 194 CRD schemas into /var/folders/kw/5ph8tf5n7_gf40strrs7lb3c0000gq/T/tmp.K3H4AhzO5a/schemas
+Summary: 340 resources found in 24 files - Valid: 272, Invalid: 0, Errors: 0, Skipped: 68
+Summary: 398 resources found in 26 files - Valid: 330, Invalid: 0, Errors: 0, Skipped: 68
+ ✔ kubeconform (kind + aws, rendered as Argo CD would)
+==> kyverno test (admission policies)
+Loading test  ( /var/folders/kw/5ph8tf5n7_gf40strrs7lb3c0000gq/T/tmp.bV6SDvWMHz/kyverno-test.yaml ) ...
+  Loading values/variables ...
+  Loading policies ...
+  Loading resources ...
+  Loading exceptions ...
+  Applying 6 policies to 19 resources with 0 exceptions ...
+  Checking results ...
+
+│──────────│─────────────────────────────────│──────│─────────────────────────────────────────────────│────────│──────────│
+│ ID (27)  │ POLICY                          │ RULE │ RESOURCE                                        │ RESULT │ REASON   │
+│──────────│─────────────────────────────────│──────│─────────────────────────────────────────────────│────────│──────────│
+│ 1        │ require-non-root                │      │ v1/Pod/fincore-cde/root-uid                     │ Pass   │ Ok       │
+│ 2        │ require-non-root                │      │ v1/Pod/fincore-cde/root-container-override      │ Pass   │ Ok       │
+│ 3        │ require-non-root                │      │ v1/Pod/fincore-cde/no-run-as-non-root           │ Pass   │ Ok       │
+│ 4        │ require-non-root                │      │ v1/Pod/fincore-cde/compliant-cde-pod            │ Pass   │ Ok       │
+│ 5        │ require-non-root                │      │ v1/Pod/fincore/compliant-app-pod                │ Pass   │ Ok       │
+│ 6        │ require-non-root                │      │ apps/v1/Deployment/fincore/root-deployment      │ Pass   │ Excluded │
+│ 7        │ require-non-root                │      │ apps/v1/Deployment/fincore/root-deployment      │ Pass   │ Ok       │
+│ 8        │ require-non-root                │      │ apps/v1/Deployment/fincore/compliant-deployment │ Pass   │ Excluded │
+│ 9        │ require-non-root                │      │ apps/v1/Deployment/fincore/compliant-deployment │ Pass   │ Ok       │
+│ 10       │ require-read-only-root-fs       │      │ v1/Pod/fincore-cde/writable-root-fs             │ Pass   │ Ok       │
+│ 11       │ require-read-only-root-fs       │      │ v1/Pod/fincore-cde/compliant-cde-pod            │ Pass   │ Ok       │
+│ 12       │ require-read-only-root-fs       │      │ v1/Pod/fincore/compliant-app-pod                │ Pass   │ Ok       │
+│ 13       │ require-resources               │      │ v1/Pod/fincore-cde/missing-memory-limit         │ Pass   │ Ok       │
+│ 14       │ require-resources               │      │ v1/Pod/fincore-cde/missing-requests             │ Pass   │ Ok       │
+│ 15       │ require-resources               │      │ v1/Pod/fincore-cde/compliant-cde-pod            │ Pass   │ Ok       │
+│ 16       │ require-resources               │      │ v1/Pod/fincore/compliant-app-pod                │ Pass   │ Ok       │
+│ 17       │ restrict-image-registries       │      │ v1/Pod/fincore-cde/foreign-image                │ Pass   │ Ok       │
+│ 18       │ restrict-image-registries       │      │ v1/Pod/fincore-cde/look-alike-registry          │ Pass   │ Ok       │
+│ 19       │ restrict-image-registries       │      │ v1/Pod/fincore/third-party-wrong-digest         │ Pass   │ Ok       │
+│ 20       │ restrict-image-registries       │      │ v1/Pod/fincore-cde/foreign-init-container       │ Pass   │ Ok       │
+│ 21       │ restrict-image-registries       │      │ v1/Pod/fincore-cde/compliant-cde-pod            │ Pass   │ Ok       │
+│ 22       │ restrict-image-registries       │      │ v1/Pod/fincore/approved-third-party             │ Pass   │ Ok       │
+│ 23       │ cde-pods-on-cde-nodes           │      │ v1/Pod/fincore-cde/cde-pod-off-cde-nodes        │ Pass   │ Ok       │
+│ 24       │ cde-pods-on-cde-nodes           │      │ v1/Pod/fincore-cde/compliant-cde-pod            │ Pass   │ Ok       │
+│ 25       │ no-cde-tolerations-outside-zone │      │ v1/Pod/fincore/app-pod-tolerates-cde            │ Pass   │ Ok       │
+│ 26       │ no-cde-tolerations-outside-zone │      │ v1/Pod/playground/blanket-toleration-elsewhere  │ Pass   │ Ok       │
+│ 27       │ no-cde-tolerations-outside-zone │      │ v1/Pod/fincore/compliant-app-pod                │ Pass   │ Ok       │
+│──────────│─────────────────────────────────│──────│─────────────────────────────────────────────────│────────│──────────│
+
+
+Test Summary: 27 tests passed and 0 tests failed
+
+ ✔ kyverno test (admission policies)
+==> actionlint
+ ✔ actionlint
+==> shellcheck
+ ✔ shellcheck
+==> shellcheck (in-cluster scripts)
+ ✔ shellcheck (in-cluster scripts)
+
+ ✔ ALL CHECKS PASSED

@@ -1,0 +1,21 @@
+==> stable: payments-api:0.1.1 (69555c57b4) -> releasing healthy build payments-api:0.1.1-rc.1793115552
+ ✔ built fincore/payments-api:0.1.1-rc.1793115552 (fault_rate=0)
+ ✔ published fincore-registry:5000/fincore/payments-api:0.1.1-rc.1793115552 (signed, SBOM attested (60 packages))
+ ✔ committed: deploy(kind): payments-api 0.1.1-rc.1793115552 (ffd5399)
+ ✔ canary started after 52s (hash b658f9b54)
+   [ 52s] phase=Progressing step=0/6 weight=- analysis=-
+   [ 63s] phase=Paused step=1/6 weight=- analysis=Running
+   [152s] phase=Paused step=3/6 weight=- analysis=Running
+   [214s] phase=Progressing step=4/6 weight=- analysis=Running
+   [219s] phase=Paused step=5/6 weight=- analysis=Running
+   [276s] phase=Progressing step=6/6 weight=- analysis=Running
+   [281s] phase=Healthy step=6/6 weight=- analysis=-
+ ✔ promoted to 100% after 281s
+   AnalysisRun payments-api-b658f9b54-4: Successful
+     latency-p95: Successful — Successful:[0.29783490191507805], Successful:[0.23714285714285716], Successful:[0.22899999999999987], Successful:[0.15875000000000003], Successful:[0.16103415770812746], Successful:[0.15444096040765684]
+     success-rate: Successful — Successful:[1], Successful:[1], Successful:[1], Successful:[1], Successful:[1], Successful:[1]
+ ✔ promotion backed by 12 successful measurement(s)
+==> reverting the release commit (rollbackWindow: immediate switch back)
+ ✔ back on payments-api:0.1.1
+
+ ✔ DEMO PASSED: healthy build promoted through all canary steps in 281s

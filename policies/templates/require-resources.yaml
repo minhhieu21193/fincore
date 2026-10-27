@@ -1,0 +1,25 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: require-resources
+  annotations:
+    policies.kyverno.io/title: Resource requests and memory limits
+    policies.kyverno.io/description: >-
+      Every container must request CPU and memory and set a memory limit. A CPU
+      limit is deliberately not required: throttling hurts tail latency, whereas
+      an unbounded memory footprint is what harms neighbouring workloads.
+spec:
+  {{- include "policies.common" . | nindent 2 }}
+  {{- include "policies.matchEnforcedPods" . | nindent 2 }}
+  variables:
+    - name: offenders
+      expression: >-
+        (object.spec.containers + object.spec.?initContainers.orValue([])).filter(c,
+          !c.?resources.?requests.?cpu.hasValue() ||
+          !c.?resources.?requests.?memory.hasValue() ||
+          !c.?resources.?limits.?memory.hasValue()
+        ).map(c, c.name)
+  validations:
+    - expression: size(variables.offenders) == 0
+      messageExpression: >-
+        'requests.cpu, requests.memory and limits.memory are required for: ' + variables.offenders.join(', ')

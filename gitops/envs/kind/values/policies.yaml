@@ -1,0 +1,5 @@
+# kind: the local-path provisioner creates short-lived helper pods with a blanket
+# toleration on whichever node a volume lands (CDE nodes included). It is
+# node-level storage plumbing, like the EBS CSI node plugin in kube-system on AWS.
+cde:
+  daemonNamespaces: [kube-system, monitoring, local-path-storage]

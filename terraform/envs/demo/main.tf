@@ -21,6 +21,15 @@ module "kms" {
   tags        = local.tags
 }
 
+# Vault auto-unseal: its own key, usable only by Vault's Pod Identity role.
+module "vault_kms" {
+  source                  = "../../modules/kms"
+  alias                   = "${local.name}-vault-unseal"
+  description             = "FinCore ${var.environment}: Vault auto-unseal"
+  deletion_window_in_days = 30
+  tags                    = local.tags
+}
+
 module "network" {
   source             = "../../modules/network"
   name               = local.name
@@ -51,8 +60,10 @@ module "secrets" {
   source = "../../modules/secrets"
   generated = {
     "fincore-payments-db"     = "password"
-    "fincore-ledger-db"       = "password"
     "fincore-webhook-signing" = "secret"
+    # Bootstrap password of Vault's database admin role; Vault rotates it on
+    # first use. The ledger has no static password (Vault-issued users).
+    "fincore-vault-db-admin" = "password"
   }
   kms_key_arn = module.kms.key_arn
   tags        = local.tags
@@ -72,6 +83,8 @@ module "eks" {
   hosted_zone_arn            = data.aws_route53_zone.this.arn
   secrets_manager_arns       = concat(values(module.secrets.secret_arns), [module.aurora.master_user_secret_arn])
   payment_events_queue_arn   = module.queues.queue_arn
+  vault_kms_key_arn          = module.vault_kms.key_arn
+  ecr_repository_arns        = values(module.ecr.repository_arns)
   tags                       = local.tags
 }
 
@@ -83,9 +96,10 @@ module "aurora" {
   max_acu              = var.aurora_max_acu
   vpc_id               = module.network.vpc_id
   db_subnet_group_name = module.network.database_subnet_group_name
+  # Only the cardholder-data-zone nodes and the system nodes (Vault) reach the database.
   allowed_security_group_ids = {
-    nodes   = module.eks.node_security_group_id
-    cluster = module.eks.cluster_primary_security_group_id
+    cde-nodes    = module.eks.cde_nodes_security_group_id
+    system-nodes = module.eks.system_nodes_security_group_id
   }
   kms_key_arn = module.kms.key_arn
   tags        = local.tags
@@ -133,4 +147,21 @@ resource "aws_route53_record" "api_validation" {
 resource "aws_acm_certificate_validation" "api" {
   certificate_arn         = aws_acm_certificate.api.arn
   validation_record_fqdns = [for r in aws_route53_record.api_validation : r.fqdn]
+}
+
+# Edge protection for the public API (attached to the ALB by ingress annotation).
+module "waf" {
+  source              = "../../modules/waf"
+  name                = local.name
+  rate_limit_per_5min = var.waf_rate_limit_per_5min
+  kms_key_arn         = module.kms.key_arn
+  tags                = local.tags
+}
+
+# Account audit trail (CloudTrail -> S3 + CloudWatch Logs).
+module "audit" {
+  source        = "../../modules/audit"
+  name          = local.name
+  force_destroy = var.audit_force_destroy
+  tags          = local.tags
 }

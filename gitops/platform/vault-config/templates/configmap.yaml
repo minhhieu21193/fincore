@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-configurer
+data:
+  configure.sh: |
+    {{- .Files.Get "files/configure.sh" | nindent 4 }}
+  policy.vault-configurer.hcl: |
+    {{- .Files.Get "files/policies/vault-configurer.hcl" | nindent 4 }}
+  sql.create.sql: |
+    {{- .Files.Get "files/sql/create.sql" | nindent 4 }}
+  sql.revoke.sql: |
+    {{- .Files.Get "files/sql/revoke.sql" | nindent 4 }}
+  {{- range $name, $r := .Values.databaseRoles }}
+  policy.{{ $name }}-db.hcl: |
+    # {{ $name }}: short-lived database users for its own role, nothing else.
+    path "database/creds/{{ $name }}" {
+      capabilities = ["read"]
+    }
+  role.{{ $name }}: |
+    NAME={{ $name }}
+    OWNER_ROLE={{ $r.ownerRole }}
+    SERVICE_ACCOUNT={{ $r.serviceAccount }}
+    NAMESPACE={{ $r.namespace }}
+    DEFAULT_TTL={{ $r.defaultTTL }}
+    MAX_TTL={{ $r.maxTTL }}
+  {{- end }}

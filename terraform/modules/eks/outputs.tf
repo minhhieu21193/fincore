@@ -32,3 +32,13 @@ output "karpenter_interruption_queue" {
   description = "SQS queue for Spot interruption events."
   value       = module.karpenter.queue_name
 }
+
+output "cde_nodes_security_group_id" {
+  description = "Security group of cardholder-data-zone nodes."
+  value       = aws_security_group.cde_nodes.id
+}
+
+output "system_nodes_security_group_id" {
+  description = "Security group of the system node group (Vault)."
+  value       = aws_security_group.system_nodes.id
+}
