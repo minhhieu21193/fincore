@@ -10,6 +10,7 @@ components:
   metrics-server: { enabled: true }
   cert-manager: { enabled: true }
   external-secrets: { enabled: true }
+  prometheus-operator-crds: { enabled: true }
   kube-prometheus-stack: { enabled: true }
   kyverno: { enabled: true }
   local-kms: { enabled: true }

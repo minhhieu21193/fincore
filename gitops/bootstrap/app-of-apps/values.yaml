@@ -51,6 +51,16 @@ components:
     chart: { repo: https://charts.external-secrets.io, name: external-secrets, version: 2.14.0 }
     valueFiles: [platform/external-secrets/values.yaml]
 
+  # Prometheus Operator CRDs, applied before the operator starts. The operator
+  # only watches resource types that exist when it starts: with the CRDs in the
+  # same app it could start first and never reconcile the Prometheus server.
+  prometheus-operator-crds:
+    enabled: false
+    wave: -11
+    namespace: monitoring
+    serverSideApply: true   # CRDs exceed the client-side last-applied annotation limit
+    chart: { repo: https://prometheus-community.github.io/helm-charts, name: prometheus-operator-crds, version: 32.0.1 }
+
   kube-prometheus-stack:
     enabled: false
     wave: -10

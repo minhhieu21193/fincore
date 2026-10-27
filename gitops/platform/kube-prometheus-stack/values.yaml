@@ -1,7 +1,9 @@
 # Phase 1 uses Prometheus as the canary-analysis data source only.
 # Grafana, Alertmanager, Loki and Tempo are added in Phase 3.
+# CRDs come from the prometheus-operator-crds app (32.0.1 = operator v0.94.1,
+# the version this chart ships), one sync wave earlier.
 crds:
-  enabled: true
+  enabled: false
 grafana:
   enabled: false
 alertmanager:

@@ -82,7 +82,9 @@ func latency(addr string, n int, every, timeout time.Duration) {
 	failed := 0
 	for range n {
 		start := time.Now()
-		conn, err := net.DialTimeout("tcp", addr, timeout)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
+		cancel()
 		if err != nil {
 			failed++
 		} else {
