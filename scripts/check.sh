@@ -3,7 +3,7 @@
 #
 #   scripts/check.sh            # everything
 #   scripts/check.sh --go       # go vet, go test, golangci-lint
-#   scripts/check.sh --static   # terraform, checkov, helm, kubeconform, kyverno test, actionlint, shellcheck
+#   scripts/check.sh --static   # terraform, checkov, helm, kubeconform, kyverno test, promtool, actionlint, shellcheck
 #
 # Go tests that need PostgreSQL run when TEST_DATABASE_URL is set
 # (make test-db starts one in docker).
@@ -65,6 +65,7 @@ helm_lint() {
   "${lint[@]}" gitops/platform/karpenter-nodepools --set clusterName=lint --set nodeRole=lint &&
   "${lint[@]}" policies &&
   "${lint[@]}" dashboards &&
+  "${lint[@]}" gitops/platform/slo &&
   "${lint[@]}" policies --set signature.mode=keyless &&
   "${lint[@]}" gitops/apps/fincore-base -f gitops/apps/cde-base/values.yaml &&
   "${lint[@]}" gitops/bootstrap/app-of-apps -f gitops/envs/kind/app-of-apps.yaml &&
@@ -108,7 +109,7 @@ dashboards_check() {
 }
 
 static_checks() {
-  need terraform tflint checkov helm yq jq kubeconform kyverno actionlint shellcheck python3
+  need terraform tflint checkov helm yq jq kubeconform kyverno actionlint shellcheck python3 promtool
   run "terraform fmt" terraform fmt -check -recursive terraform
   run "terraform validate" terraform_validate
   run "tflint" tflint_all
@@ -117,6 +118,8 @@ static_checks() {
   run "kubeconform (kind + aws, rendered as Argo CD would)" kubeconform_envs
   run "kyverno test (admission policies)" policy_tests
   run "dashboards up to date" dashboards_check
+  run "promtool (SLO rules and alert tests)" bash -c \
+    "promtool check rules gitops/platform/slo/rules/*.yaml && promtool test rules gitops/platform/slo/tests/*.test.yaml"
   run "actionlint" actionlint
   run "shellcheck" shellcheck -x scripts/*.sh scripts/ci/*.sh
   run "shellcheck (in-cluster scripts)" shellcheck -s sh gitops/platform/vault-config/files/configure.sh

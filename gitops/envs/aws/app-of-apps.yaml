@@ -54,6 +54,7 @@ components:
   tempo: { enabled: true }
   fluent-bit: { enabled: true }
   dashboards: { enabled: true }
+  slo: { enabled: true }
   aws-load-balancer-controller:
     enabled: true
     clusterValues: |

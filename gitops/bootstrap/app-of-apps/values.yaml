@@ -165,6 +165,13 @@ components:
     namespace: monitoring
     repoPath: dashboards
 
+  # SLO recording rules and burn-rate alerts (Alertmanager routes them).
+  slo:
+    enabled: false
+    wave: -5
+    namespace: monitoring
+    path: platform/slo
+
   # Kyverno admission policies (top-level policies/ chart).
   policies:
     enabled: false

@@ -1,0 +1,117 @@
+# promtool test rules gitops/platform/slo/tests/slo.test.yaml
+# Traffic is synthetic: 10 payments/s (600 per minute), sampled every minute.
+rule_files:
+  - ../rules/fincore-slo.rules.yaml
+evaluation_interval: 1m
+
+tests:
+  # Healthy: 3 hours of traffic, no errors, everything under 300 ms.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{app="payments-api",route="POST /v1/payments",code="201"}'
+        values: '0+600x180'
+      - series: 'http_request_duration_seconds_bucket{app="payments-api",route="POST /v1/payments",le="0.3"}'
+        values: '0+600x180'
+      - series: 'http_request_duration_seconds_count{app="payments-api",route="POST /v1/payments"}'
+        values: '0+600x180'
+      - series: 'ledger_imbalance_minor_units{app="ledger",currency="USD"}'
+        values: '0x180'
+    promql_expr_test:
+      - expr: fincore:payments_availability:error_ratio_rate1h
+        eval_time: 120m
+        exp_samples:
+          - labels: 'fincore:payments_availability:error_ratio_rate1h{slo="payments-availability"}'
+            value: 0
+    alert_rule_test:
+      - { eval_time: 120m, alertname: PaymentsAvailabilityBudgetBurn, exp_alerts: [] }
+      - { eval_time: 120m, alertname: PaymentsLatencyBudgetBurn, exp_alerts: [] }
+      - { eval_time: 120m, alertname: LedgerImbalance, exp_alerts: [] }
+
+  # Outage: every payment fails (5xx) from minute 60 to minute 80, then recovers.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{app="payments-api",route="POST /v1/payments",code="201"}'
+        values: '0+600x60 36000x20 36600+600x100'
+      - series: 'http_requests_total{app="payments-api",route="POST /v1/payments",code="503"}'
+        values: '0x60 600+600x19 12000x100'
+    promql_expr_test:
+      # Minute 70: the last 5 minutes are all errors.
+      - expr: fincore:payments_availability:error_ratio_rate5m
+        eval_time: 70m
+        exp_samples:
+          - labels: 'fincore:payments_availability:error_ratio_rate5m{slo="payments-availability"}'
+            value: 1
+    alert_rule_test:
+      # Before the outage: nothing.
+      - { eval_time: 60m, alertname: PaymentsAvailabilityBudgetBurn, exp_alerts: [] }
+      # Minute 65: 1h and 5m windows both above 14.4x for over 2 minutes -> page.
+      # The ticket pair is also true but still pending (for: 15m).
+      - eval_time: 65m
+        alertname: PaymentsAvailabilityBudgetBurn
+        exp_alerts:
+          - exp_labels: { severity: page, slo: payments-availability }
+            exp_annotations:
+              summary: Payments are failing (5xx) fast enough to exhaust the 99.9 % availability budget
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+      # Minute 100, 20 minutes after recovery: the 1h/5m pair has cleared but
+      # the 6h/30m pair still sees the outage, so the page holds; the ticket fires.
+      - eval_time: 100m
+        alertname: PaymentsAvailabilityBudgetBurn
+        exp_alerts:
+          - exp_labels: { severity: page, slo: payments-availability }
+            exp_annotations:
+              summary: Payments are failing (5xx) fast enough to exhaust the 99.9 % availability budget
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+          - exp_labels: { severity: ticket, slo: payments-availability }
+            exp_annotations:
+              summary: Payments 5xx are slowly eating the 99.9 % availability budget
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+      # Minute 120: no errors in the last 30 minutes -> the page resolves;
+      # the slow-burn ticket stays open for follow-up.
+      - eval_time: 120m
+        alertname: PaymentsAvailabilityBudgetBurn
+        exp_alerts:
+          - exp_labels: { severity: ticket, slo: payments-availability }
+            exp_annotations:
+              summary: Payments 5xx are slowly eating the 99.9 % availability budget
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+
+  # Latency: half of the payments take longer than 300 ms; none fail.
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{app="payments-api",route="POST /v1/payments",code="201"}'
+        values: '0+600x30'
+      - series: 'http_request_duration_seconds_bucket{app="payments-api",route="POST /v1/payments",le="0.3"}'
+        values: '0+300x30'
+      - series: 'http_request_duration_seconds_count{app="payments-api",route="POST /v1/payments"}'
+        values: '0+600x30'
+    promql_expr_test:
+      - expr: fincore:payments_latency:slow_ratio_rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'fincore:payments_latency:slow_ratio_rate5m{slo="payments-latency"}'
+            value: 0.5
+    alert_rule_test:
+      - { eval_time: 10m, alertname: PaymentsAvailabilityBudgetBurn, exp_alerts: [] }
+      - eval_time: 10m
+        alertname: PaymentsLatencyBudgetBurn
+        exp_alerts:
+          - exp_labels: { severity: page, slo: payments-latency }
+            exp_annotations:
+              summary: Payments are slower than 300 ms often enough to exhaust the 99 % latency budget
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+
+  # Ledger invariant: an imbalance pages after one minute.
+  - interval: 1m
+    input_series:
+      - series: 'ledger_imbalance_minor_units{app="ledger",currency="USD"}'
+        values: '0x5 4200x10'
+    alert_rule_test:
+      - { eval_time: 5m, alertname: LedgerImbalance, exp_alerts: [] }
+      - eval_time: 8m
+        alertname: LedgerImbalance
+        exp_alerts:
+          - exp_labels: { severity: page }
+            exp_annotations:
+              summary: The ledger's debits and credits no longer sum to zero
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/ledger-imbalance.md

@@ -16,6 +16,7 @@ components:
   tempo: { enabled: true }
   fluent-bit: { enabled: true }
   dashboards: { enabled: true }
+  slo: { enabled: true }
   kyverno: { enabled: true }
   local-kms: { enabled: true }
   policies: { enabled: true }
