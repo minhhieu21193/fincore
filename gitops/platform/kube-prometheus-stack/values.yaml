@@ -65,6 +65,35 @@ grafana:
           enabled: true
 alertmanager:
   enabled: true
+  # Routing for the SLO alerts (gitops/platform/slo): severity=page interrupts
+  # someone, severity=ticket is handled in working hours. A firing page holds
+  # back the ticket of the same SLO. The receivers carry no integration in git:
+  # on a real deployment "page" gets the on-call tool and "ticket" the team
+  # channel, with their keys from Secrets Manager, never committed. The routing
+  # itself is visible in Alertmanager's API (each alert lists its receiver).
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: ticket
+      group_by: [alertname, slo, severity]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      routes:
+        - receiver: "null"
+          matchers: ['alertname =~ "Watchdog|InfoInhibitor"']
+        - receiver: page
+          matchers: ['severity = "page"']
+          repeat_interval: 1h
+    inhibit_rules:
+      - source_matchers: ['severity = "page"']
+        target_matchers: ['severity = "ticket"']
+        equal: [alertname, slo]
+    receivers:
+      - name: "null"
+      - name: page
+      - name: ticket
   alertmanagerSpec:
     retention: 120h
     resources:
