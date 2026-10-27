@@ -18,8 +18,8 @@ VALUES="$ROOT/gitops/envs/kind/values/$IMAGE.yaml"
 [[ -f "$VALUES" ]] || die "no kind values for $IMAGE"
 [[ -z "$(git -C "$ROOT" status --porcelain)" ]] || die "working tree not clean: Argo CD deploys commits, so commit or stash first"
 
-# One canary at a time (see wait_rollouts_settled in lib.sh).
-wait_rollouts_settled
+# One canary at a time (see wait_rollouts_settled in lib.sh); wait up to 15 min.
+wait_rollouts_settled 900
 
 "$ROOT/scripts/build-images.sh" --only "$IMAGE" --tag "$TAG" --fault-rate "$FAULT_RATE"
 yq -i ".image.tag = \"$TAG\"" "$VALUES"

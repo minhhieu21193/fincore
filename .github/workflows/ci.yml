@@ -75,7 +75,12 @@ jobs:
           tar -xzf /tmp/kubeconform.tgz -C "$HOME/bin" kubeconform
           curl -sSfL -o /tmp/actionlint.tgz https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
           tar -xzf /tmp/actionlint.tgz -C "$HOME/bin" actionlint
-          shellcheck --version | head -2   # preinstalled on GitHub-hosted Ubuntu runners
+          # Pinned ShellCheck 0.11.0: the runner's preinstalled 0.9.0 drifts from local runs.
+          # Upstream publishes no checksum file; this is the sha256 of the release asset.
+          curl -sSfL -o /tmp/shellcheck.tar.xz https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz
+          echo "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198  /tmp/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf /tmp/shellcheck.tar.xz -C /tmp && mv /tmp/shellcheck-v0.11.0/shellcheck "$HOME/bin/"
+          "$HOME/bin/shellcheck" --version | head -2
           curl -sSfL -o "$HOME/bin/yq" https://github.com/mikefarah/yq/releases/download/v4.54.1/yq_linux_amd64 && chmod +x "$HOME/bin/yq"
           # Kyverno CLI for the admission-policy tests, checksum-verified.
           curl -sSfL -o /tmp/kyverno.tgz https://github.com/kyverno/kyverno/releases/download/v1.19.2/kyverno-cli_v1.19.2_linux_x86_64.tar.gz
