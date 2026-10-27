@@ -183,3 +183,31 @@ The CPU limit is deliberately not required: CPU throttling hurts p95 latency, wh
 - Loki and Tempo shipping of audit logs (Phase 3; Vault audit goes to stdout, ready for collection).
 - Chaos and DR (Phase 3).
 - A real PCI assessment. The mapping is illustrative.
+
+## As built: deviations from this plan and why
+
+| Plan said | Built | Why |
+|---|---|---|
+| Two extra tainted CDE workers on kind | **One** tainted CDE worker; kind is 1 control plane + 2 general + 1 CDE | The laptop VM (Docker Desktop) ran out of memory and CPU with 6 nodes. Owner-approved, kind only. On AWS the `cde` NodePool scales freely. |
+| Docker VM 4 CPU / 8 GB | **6 CPU / 10 GB**, plus a 2-CPU cap on the kind control-plane container | At 4 CPUs the idle platform used ~3.6 cores. At 6 CPUs, garbage-collection bursts of the API server (~1 GB of CRD schemas) still stalled the whole VM for seconds and failed a healthy canary's p95 gate. Thresholds are unchanged. See [`docs/decisions-log.md`](../decisions-log.md). |
+| Plain-HTTP local registry, `scripts/sign-images.sh`, key in `.kube/cosign/` | **TLS** registry with a locally generated CA, `scripts/publish-image.sh`, all local key material in `.kube/pki/` | Kyverno 1.19 fetches cosign v3 bundles through the OCI referrers API over HTTPS even when insecure registries are allowed. TLS is also closer to ECR. Kyverno trusts the CA through a node-level CA bundle (kind only). |
+| `cosign sign --tlog-upload=false` | An empty cosign **signing config** (no Rekor/TSA services) | cosign v3 removed `--tlog-upload=false` with signing configs. |
+| PolicyReports as continuous evidence | Kyverno runs **admission only** (no reports, background or cleanup controllers) | Per-admission EphemeralReports cost more API-server memory and churn than the application on the small cluster. Noted as a gap in the compliance mapping. |
+| — | Kyverno webhook timeout 30 s for image verification | Admitting a signed image verifies the signature and the SBOM attestation twice (digest mutation, then validation): up to 21 s on a busy VM. |
+| — | `local-path-storage` joins the namespaces allowed to tolerate the CDE taint (kind only) | The `no-cde-tolerations-outside-zone` policy blocked the local-path provisioner's helper pods (blanket toleration), so no volume could be created. They are node-level storage plumbing, like the EBS CSI node plugin in kube-system on AWS. |
+| Vault default exec readiness probe | HTTP `/v1/sys/health?standbyok=true` (and TCP probes for kind's PostgreSQL) | Exec probes (`vault status` every 5 s on 3 pods) timed out on the busy VM, flapping Vault and, in turn, the ledger. |
+| — | The vault-config job's ConfigMap is named `vault-configurer` | `vault-config` collided with the Vault chart's server ConfigMap. |
+| — | Argo CD controller limit 1.5 Gi; on kind: 60 s reconciliation, fewer processors | The controller was OOMKilled at 768 Mi once Kyverno's CRDs were watched. |
+| — | No default Prometheus rules on kind, 30 s scrape | Unused before Phase 3's SLO rules; FinCore PodMonitors keep 15 s for canary analysis. |
+| — | kubeconform validates custom resources against schemas **generated from the pinned charts' CRDs** | The community catalog has no `policies.kyverno.io` schemas. Strict mode catches typos in policies (verified). |
+| — | The Karpenter chart is vendored (checksum-verified) for CI rendering | public.ecr.aws answers `429 Data limit exceeded` to shared GitHub runners. |
+| — | `httpx.Client` recycles idle keep-alive connections every 10 s; payments-api 0.1.1 | payments-api's pooled connections stayed pinned to the old ledger pods, so a ledger canary received no traffic and its analysis was inconclusive (paused). A Phase 1 latent bug. |
+| — | Traffic generator capped at 30 concurrent VUs | With 100 VUs a slow spell grew into a self-sustaining overload (database pool exhausted). |
+| — | kind: ledger DB connections live 15 s (2 s health check); AWS: 10 min | Vault Agent renders the next user ~40 s before the 3-minute lease ends; connections must be recycled well before revocation terminates the old user's sessions. |
+| — | On kind, releases never overlap (`wait_rollouts_settled`) | Overlapping canaries share one small CPU budget and skew each other's latency analysis. |
+| VPC CNI NetworkPolicy enforcement | Enforced in "standard" mode; **strict mode not enabled** | Measured on kind: a new pod is unrestricted for ~1 s until the policy engine programs it. The VPC CNI's standard mode behaves the same. Strict mode closes the window but denies every pod without a policy cluster-wide, so it needs policies for all platform namespaces first (listed as a gap). |
+| — | `netprobe` (signed, distroless) for the NetworkPolicy demo, with `-delay` and `-repeat` (connect-latency distribution) | Kyverno only admits signed, compliant images in FinCore namespaces. `-repeat` showed that the VM-wide stalls hit policy and non-policy paths alike. |
+
+Not verifiable without AWS (documented, not guessed):
+- `aws-ebs-csi-driver` add-on version: like `eks-pod-identity-agent`, it is looked up with `aws eks describe-addon-versions` (`terraform.tfvars.example`).
+- Keyless verification of `release.yml@main` signatures by Kyverno, WAF, CloudTrail, Aurora security groups and VPC CNI enforcement are statically checked only.
