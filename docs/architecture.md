@@ -59,6 +59,11 @@ flowchart LR
 
   classDef zone fill:#fde8e8,stroke:#c0392b,stroke-width:2px;
   class api,ledger,dbinit zone;
+  style cde fill:#fff5f5,stroke:#c0392b,stroke-width:4px,stroke-dasharray:8 4
+  style app fill:#f5f8ff,stroke:#5b7bb2
+  style data fill:#f7f7f7,stroke:#888
+  style vaultns fill:#f6f2ff,stroke:#7d5ba6
+  style edge fill:#f2fbf5,stroke:#3b8a5a
 ```
 
 | From → to | Why it is allowed | Rule |

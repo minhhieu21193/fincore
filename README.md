@@ -4,6 +4,8 @@ FinCore is a small but real payment platform (card payments, a double-entry ledg
 
 > **Status: Phase 1 (platform core) and Phase 2 (security and compliance) are complete and verified on kind.** Phase 3 (reliability, observability, cost) is next. The AWS stack has passed static validation but has **not been applied yet**. AWS numbers (load test, RTO/RPO, cost per day) will be added after a single recorded demo day on a dedicated account.
 
+![The cardholder-data zone: payments-api and the ledger behind default-deny NetworkPolicies, Vault-issued database users, WAF at the edge](docs/img/architecture-cde.png)
+
 ## What happens to a payment
 
 ```mermaid
@@ -42,6 +44,8 @@ sequenceDiagram
 3. In the background, an AnalysisRun queries Prometheus for **canary pods only**: success rate ≥ 99% and p95 ≤ 300 ms. If there is no data yet, the result is *inconclusive*, never a pass.
 4. If a bad build fails analysis, the canary is aborted and scaled to zero automatically, and stable keeps serving.
 
+![A bad build aborted automatically by the canary analysis (Argo Rollouts dashboard)](docs/img/bad-release-rollback.png)
+
 Verified on kind (`docs/phase-1-results.md`):
 
 | Release | Outcome | Time | Canary success rate (measured) |
@@ -63,6 +67,9 @@ Payments and the ledger run in a **cardholder-data zone** (namespace `fincore-cd
 | The zone is isolated | Default-deny NetworkPolicies (VPC CNI enforcement on EKS); Aurora admits only the CDE and Vault node security groups | outside pods cannot reach the ledger, PostgreSQL or the queue; zone pods cannot reach the internet |
 | Edge and audit (AWS) | AWS WAF (managed rules, rate limit), CloudTrail (multi-region, validated, 365 days), EKS control-plane logs, Vault audit device | statically checked (Terraform, checkov) |
 
+| ![10 non-compliant workloads rejected at admission, a signed image admitted by digest](docs/img/admission-policies.png) | ![Vault-issued database users rotate under load: 0 errors, 0 restarts](docs/img/credential-rotation.png) |
+|---|---|
+
 With all of this switched on, Phase 1 still holds. A bad build was rolled back automatically in 139 s, and a healthy build was promoted in 281 s.
 
 ## Run it locally
@@ -80,6 +87,8 @@ make demo-netpol        # B3: the cardholder-data zone is isolated
 make check              # every static check (same as CI), incl. kyverno test
 make kind-down
 ```
+
+![Argo CD app-of-apps on kind: 23 applications in sync-wave order, all Healthy and Synced](docs/img/argocd-apps.png)
 
 Argo CD on kind syncs from your **local commits**. An in-cluster, read-only git server serves the bind-mounted repository, and Argo CD tracks `HEAD`, the branch you have checked out. Uncommitted changes are never deployed. The demo scripts commit a release and revert it, so run them on a scratch branch if you want a clean history.
 
