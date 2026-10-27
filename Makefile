@@ -9,7 +9,7 @@ help: ## Show targets
 
 .PHONY: test-db
 test-db: ## Start a throwaway PostgreSQL 17 for Go tests (docker)
-	@docker inspect fincore-testpg >/dev/null 2>&1 || docker run -d --name fincore-testpg -e POSTGRES_PASSWORD=test -p $(TEST_DB_PORT):5432 \
+	@docker start fincore-testpg >/dev/null 2>&1 || docker run -d --name fincore-testpg -e POSTGRES_PASSWORD=test -p $(TEST_DB_PORT):5432 \
 	  postgres:17.11-alpine3.23@sha256:01ea903aa65deb58eb49d6e09d859ecff63a6bb7d61feca55f2abad71d08f72a >/dev/null
 	@until docker exec fincore-testpg pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done; echo "test database ready on :$(TEST_DB_PORT)"
 
