@@ -135,6 +135,36 @@ components:
     namespace: cert-manager
     path: platform/cluster-issuers
 
+  # Observability: logs (Fluent Bit -> Loki), traces (services -> Tempo) and
+  # Grafana dashboards (top-level dashboards/ chart, picked up by Grafana's
+  # sidecar). Grafana and Alertmanager come with kube-prometheus-stack.
+  loki:
+    enabled: false
+    wave: -5
+    namespace: monitoring
+    chart: { repo: ghcr.io/grafana-community/helm-charts, name: loki, version: 20.0.1 }
+    valueFiles: [platform/loki/values.yaml]
+
+  tempo:
+    enabled: false
+    wave: -5
+    namespace: monitoring
+    chart: { repo: ghcr.io/grafana-community/helm-charts, name: tempo, version: 3.2.1 }
+    valueFiles: [platform/tempo/values.yaml]
+
+  fluent-bit:
+    enabled: false
+    wave: -5
+    namespace: monitoring
+    chart: { repo: https://fluent.github.io/helm-charts, name: fluent-bit, version: 0.58.3 }
+    valueFiles: [platform/fluent-bit/values.yaml]
+
+  dashboards:
+    enabled: false
+    wave: -5
+    namespace: monitoring
+    repoPath: dashboards
+
   # Kyverno admission policies (top-level policies/ chart).
   policies:
     enabled: false

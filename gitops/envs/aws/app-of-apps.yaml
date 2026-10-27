@@ -50,6 +50,10 @@ components:
   external-secrets: { enabled: true }
   prometheus-operator-crds: { enabled: true }
   kube-prometheus-stack: { enabled: true }
+  loki: { enabled: true }
+  tempo: { enabled: true }
+  fluent-bit: { enabled: true }
+  dashboards: { enabled: true }
   aws-load-balancer-controller:
     enabled: true
     clusterValues: |

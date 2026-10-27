@@ -31,6 +31,11 @@ configs:
       type: helm
       url: public.ecr.aws/karpenter
       enableOCI: "true"
+    grafana-community:
+      name: grafana-community
+      type: helm
+      url: ghcr.io/grafana-community/helm-charts
+      enableOCI: "true"
 
 dex:
   enabled: false

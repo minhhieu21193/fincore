@@ -1,0 +1,6 @@
+# AWS: the index and chunks live on an encrypted gp3 volume (7-day retention).
+# Object storage (S3 with Pod Identity) is the next step once log volume
+# outgrows a single binary.
+singleBinary:
+  persistence:
+    storageClass: gp3-encrypted

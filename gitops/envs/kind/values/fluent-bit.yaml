@@ -1,0 +1,4 @@
+# kind: only the namespaces the demos look at (FinCore, its data stand-ins,
+# Vault, admission control and progressive delivery), to keep Loki small.
+fincore:
+  logPath: /var/log/containers/*_fincore_*.log,/var/log/containers/*_fincore-cde_*.log,/var/log/containers/*_fincore-data_*.log,/var/log/containers/*_vault_*.log,/var/log/containers/*_kyverno_*.log,/var/log/containers/*_argo-rollouts_*.log
