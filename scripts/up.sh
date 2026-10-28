@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create the AWS demo environment (spends money: about $32 a day idle, see docs/cost.md).
+# Create the AWS demo environment (spends money: about $34 a day idle, see docs/cost.md).
 # Never run in this project; kept as the reviewed, ordered procedure.
 #
 #   FINCORE_AWS=confirm scripts/up.sh

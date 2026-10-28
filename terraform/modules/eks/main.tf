@@ -63,9 +63,12 @@ module "eks" {
       ami_release_version = var.system_ami_release_version
       instance_types      = var.system_instance_types
       capacity_type       = "ON_DEMAND"
-      min_size            = 2
-      max_size            = 3
-      desired_size        = 2
+      # Three: Vault (3 replicas, one per node and per AZ, pinned to this
+      # group) needs one node in each AZ, and Karpenter does not scale managed
+      # node groups. Two left the third Vault pod Pending forever.
+      min_size     = 3
+      max_size     = 4
+      desired_size = 3
       labels = {
         "fincore.io/node-role" = "system"
       }

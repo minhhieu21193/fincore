@@ -8,7 +8,7 @@ FinCore's load varies: payments follow business hours, and canary releases brief
 
 ## Decision
 
-Karpenter provisions all workload nodes. A small managed node group (2 × m7g.large) runs only the cluster add-ons Karpenter itself needs.
+Karpenter provisions all workload nodes. A small managed node group (3 × m7g.large, one per AZ) runs Vault and the cluster add-ons Karpenter itself needs.
 
 - NodePool `spot` (weight 100) and `on-demand` (weight 10): Graviton and x86, families c/m/r, generation > 5. Karpenter picks the cheapest instance that fits the pending pods and falls back to on-demand when Spot capacity is short.
 - NodePool `cde`: on-demand only, tainted `fincore.io/zone=cde`, its own EC2NodeClass with the CDE security group; consolidated only when empty, one node at a time.
