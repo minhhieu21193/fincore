@@ -65,6 +65,7 @@ resource "helm_release" "root_app" {
                 vaultKmsKeyId              = module.vault_kms.key_arn
                 kmsKeyArn                  = module.kms.key_arn
                 wafAclArn                  = module.waf.web_acl_arn
+                backupBucket               = module.backups.bucket_name
               }
             }
           }

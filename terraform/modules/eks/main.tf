@@ -182,6 +182,61 @@ module "vault_pod_identity" {
   tags = var.tags
 }
 
+# Backups: Velero (cluster state) and the Vault snapshot job write to the
+# backup bucket, each through its own role; they can list, read and write
+# objects there, and nothing else.
+data "aws_iam_policy_document" "backups" {
+  statement {
+    sid       = "ListBucket"
+    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
+    resources = [var.backup_bucket_arn]
+  }
+  statement {
+    sid       = "Objects"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts"]
+    resources = ["${var.backup_bucket_arn}/*"]
+  }
+  statement {
+    sid       = "Encryption"
+    actions   = ["kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+    resources = [var.kms_key_arn]
+  }
+}
+
+module "velero_pod_identity" {
+  source  = "terraform-aws-modules/eks-pod-identity/aws"
+  version = "2.10.0"
+
+  name                    = "${var.name}-velero"
+  attach_custom_policy    = true
+  source_policy_documents = [data.aws_iam_policy_document.backups.json]
+  associations = {
+    this = {
+      cluster_name    = module.eks.cluster_name
+      namespace       = "velero"
+      service_account = "velero"
+    }
+  }
+  tags = var.tags
+}
+
+module "vault_snapshot_pod_identity" {
+  source  = "terraform-aws-modules/eks-pod-identity/aws"
+  version = "2.10.0"
+
+  name                    = "${var.name}-vault-snapshot"
+  attach_custom_policy    = true
+  source_policy_documents = [data.aws_iam_policy_document.backups.json]
+  associations = {
+    this = {
+      cluster_name    = module.eks.cluster_name
+      namespace       = "vault"
+      service_account = "vault-snapshot"
+    }
+  }
+  tags = var.tags
+}
+
 # Kyverno reads image signatures and SBOM attestations from ECR.
 data "aws_iam_policy_document" "kyverno" {
   statement {

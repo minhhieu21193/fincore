@@ -1,0 +1,10 @@
+# AWS: cluster state beyond secrets, for forensics and partial restores
+# (Secrets Manager and git hold the rest). Hourly, kept 7 days.
+schedules:
+  cluster-state:
+    schedule: "0 * * * *"
+    template:
+      ttl: 168h
+      includedNamespaces: [vault, fincore, fincore-cde, external-secrets, argocd]
+      includedResources: ["*"]
+      excludedResources: [events, events.events.k8s.io]
