@@ -40,7 +40,7 @@ class D:
         if decimals is not None: p["fieldConfig"]["defaults"]["decimals"] = decimals
         if mappings: p["fieldConfig"]["defaults"]["mappings"] = mappings
         s.add(p, w, h)
-    def ts(s, title, targets, unit="short", w=12, h=8, desc="", stack=False, minv=None, maxv=None):
+    def ts(s, title, targets, unit="short", w=12, h=8, desc="", stack=False, minv=None, maxv=None, lines=None):
         p = {"type": "timeseries", "title": title, "description": desc, "datasource": PROM,
              "targets": [{"refId": chr(65 + i), "expr": e, "legendFormat": l, "datasource": PROM}
                          for i, (e, l) in enumerate(targets)],
@@ -52,6 +52,10 @@ class D:
                  "overrides": []}}
         if minv is not None: p["fieldConfig"]["defaults"]["min"] = minv
         if maxv is not None: p["fieldConfig"]["defaults"]["max"] = maxv
+        if lines:  # dashed threshold lines, e.g. the burn rates that page
+            p["fieldConfig"]["defaults"]["custom"]["thresholdsStyle"] = {"mode": "dashed"}
+            p["fieldConfig"]["defaults"]["thresholds"] = {"mode": "absolute", "steps":
+                [{"color": "transparent", "value": None}] + [{"color": c, "value": v} for v, c in lines]}
         s.add(p, w, h)
     def logs(s, title, expr, w=24, h=10, desc=""):
         s.add({"type": "logs", "title": title, "description": desc, "datasource": LOKI,
@@ -156,3 +160,35 @@ p.ts("Log shipping (Fluent Bit)", [('sum(rate(fluentbit_output_proc_records_tota
                                    ('sum(rate(fluentbit_output_dropped_records_total[1m]))', "dropped/s")], "short")
 p.ts("Alerts firing", [('sum by (alertname, severity) (ALERTS{alertstate="firing"})', "{{alertname}} ({{severity}})")], "short")
 p.write("platform.json")
+
+# ------------------------------------------------------------------ SLOs
+o = D("fincore-slo", "FinCore / SLOs",
+      "Payments SLOs and their burn rates (gitops/platform/slo). Burn rate 1 = the budget lasts exactly 30 days; "
+      "14.4 over 1 h and 5 m, or 6 over 6 h and 30 m, pages.", ["slo"])
+AV = "fincore:payments_availability:error_ratio_rate"
+LT = "fincore:payments_latency:slow_ratio_rate"
+o.row("Over the selected time range")
+o.stat("Availability (non-5xx)", '1 - (sum(increase(http_requests_total{app="payments-api",route="POST /v1/payments",code=~"5.."}[$__range])) or vector(0)) / sum(increase(http_requests_total{app="payments-api",route="POST /v1/payments"}[$__range]))',
+       "percentunit", decimals=3, thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 0.999}],
+       desc="Objective: 99.9 %.")
+o.stat("Under 300 ms", 'sum(increase(http_request_duration_seconds_bucket{app="payments-api",route="POST /v1/payments",le="0.3"}[$__range])) / sum(increase(http_request_duration_seconds_count{app="payments-api",route="POST /v1/payments"}[$__range]))',
+       "percentunit", decimals=2, thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 0.99}],
+       desc="Objective: 99 %.")
+o.stat("Availability burn rate (1h)", f'{AV}1h / 0.001', "short", decimals=1,
+       thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 6}, {"color": "red", "value": 14.4}])
+o.stat("Latency burn rate (1h)", f'{LT}1h / 0.01', "short", decimals=1,
+       thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 6}, {"color": "red", "value": 14.4}])
+o.row("Burn rates")
+o.ts("Availability burn rate", [(f'{AV}{w} / 0.001', w) for w in ("5m", "30m", "1h", "6h")], "short",
+     lines=[(6, "orange"), (14.4, "red")], desc="Error ratio divided by the 0.1 % budget. Dashed: page thresholds.")
+o.ts("Latency burn rate", [(f'{LT}{w} / 0.01', w) for w in ("5m", "30m", "1h", "6h")], "short",
+     lines=[(6, "orange"), (14.4, "red")], desc="Share slower than 300 ms divided by the 1 % budget.")
+o.ts("Payments answered, by class", [
+    ('sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments",code=~"2.."}[1m]))', "2xx"),
+    ('sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments",code=~"4.."}[1m]))', "4xx (declines, invalid)"),
+    ('sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments",code=~"5.."}[1m]))', "5xx")], "reqps", stack=True)
+o.ts("Instances reachable", [('sum by (job) (up{job=~"fincore-cde/.*"})', "{{job}}")], "short", minv=0,
+     desc="A drop to 0 is a total outage the burn rates cannot see; PaymentsAPIUnavailable / LedgerUnavailable page on it.")
+o.ts("Alerts firing", [('sum by (alertname, severity) (ALERTS{alertstate="firing",alertname!~"Watchdog|InfoInhibitor"})', "{{alertname}} ({{severity}})")],
+     "short", w=24, h=6)
+o.write("slo.json")

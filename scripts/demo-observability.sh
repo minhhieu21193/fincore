@@ -117,8 +117,8 @@ echo
 log "5. Grafana: dashboards and data sources"
 DASH="$(grafana '/api/search?tag=fincore' | jq -r '[.[].title] | sort | join(", ")')"
 echo "   dashboards: $DASH"
-check "business, RED and platform dashboards are provisioned" \
-  test "$DASH" == "FinCore / Business, FinCore / Platform, FinCore / Service RED"
+check "business, RED, platform and SLO dashboards are provisioned" \
+  test "$DASH" == "FinCore / Business, FinCore / Platform, FinCore / SLOs, FinCore / Service RED"
 DS="$(grafana /api/datasources | jq -r '[.[].type] | sort | unique | join(",")')"
 check "data sources: Prometheus, Alertmanager, Loki, Tempo ($DS)" test "$DS" == "alertmanager,loki,prometheus,tempo"
 prom() { # instant query through Grafana's Prometheus data source -> first value

@@ -154,7 +154,7 @@ groups:
           severity: page
         annotations:
           summary: Payments are failing (5xx) fast enough to exhaust the 99.9 % availability budget
-          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
       - alert: PaymentsAvailabilityBudgetBurn
         expr: |
           (
@@ -173,7 +173,7 @@ groups:
           severity: ticket
         annotations:
           summary: Payments 5xx are slowly eating the 99.9 % availability budget
-          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
       - alert: PaymentsLatencyBudgetBurn
         expr: |
           (
@@ -192,7 +192,7 @@ groups:
           severity: page
         annotations:
           summary: Payments are slower than 300 ms often enough to exhaust the 99 % latency budget
-          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
       - alert: PaymentsLatencyBudgetBurn
         expr: |
           (
@@ -211,7 +211,7 @@ groups:
           severity: ticket
         annotations:
           summary: Payments slower than 300 ms are slowly eating the 99 % latency budget
-          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
       # Not an SLO: an invariant. Any imbalance means money was created or lost.
       - alert: LedgerImbalance
         expr: max(abs(ledger_imbalance_minor_units)) > 0
@@ -221,3 +221,26 @@ groups:
         annotations:
           summary: The ledger's debits and credits no longer sum to zero
           runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/ledger-imbalance.md
+  # The burn-rate alerts count what the servers report. When no payments-api
+  # (or ledger) instance can be scraped at all (zone loss, crash loop), there
+  # is nothing to count, so a total outage is caught here instead.
+  - name: fincore-availability
+    rules:
+      - alert: PaymentsAPIUnavailable
+        expr: absent(up{job="fincore-cde/payments-api"} == 1)
+        for: 1m
+        labels:
+          severity: page
+          slo: payments-availability
+        annotations:
+          summary: No payments-api instance is reachable
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
+      - alert: LedgerUnavailable
+        expr: absent(up{job="fincore-cde/ledger"} == 1)
+        for: 1m
+        labels:
+          severity: page
+          slo: payments-availability
+        annotations:
+          summary: No ledger instance is reachable, so no payment can be captured
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md

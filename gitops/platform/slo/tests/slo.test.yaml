@@ -52,7 +52,7 @@ tests:
           - exp_labels: { severity: page, slo: payments-availability }
             exp_annotations:
               summary: Payments are failing (5xx) fast enough to exhaust the 99.9 % availability budget
-              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
       # Minute 100, 20 minutes after recovery: the 1h/5m pair has cleared but
       # the 6h/30m pair still sees the outage, so the page holds; the ticket fires.
       - eval_time: 100m
@@ -61,11 +61,11 @@ tests:
           - exp_labels: { severity: page, slo: payments-availability }
             exp_annotations:
               summary: Payments are failing (5xx) fast enough to exhaust the 99.9 % availability budget
-              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
           - exp_labels: { severity: ticket, slo: payments-availability }
             exp_annotations:
               summary: Payments 5xx are slowly eating the 99.9 % availability budget
-              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
       # Minute 120: no errors in the last 30 minutes -> the page resolves;
       # the slow-burn ticket stays open for follow-up.
       - eval_time: 120m
@@ -74,7 +74,7 @@ tests:
           - exp_labels: { severity: ticket, slo: payments-availability }
             exp_annotations:
               summary: Payments 5xx are slowly eating the 99.9 % availability budget
-              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
 
   # Latency: half of the payments take longer than 300 ms; none fail.
   - interval: 1m
@@ -99,7 +99,7 @@ tests:
           - exp_labels: { severity: page, slo: payments-latency }
             exp_annotations:
               summary: Payments are slower than 300 ms often enough to exhaust the 99 % latency budget
-              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payments-slo-burn.md
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
 
   # Ledger invariant: an imbalance pages after one minute.
   - interval: 1m
@@ -115,3 +115,25 @@ tests:
             exp_annotations:
               summary: The ledger's debits and credits no longer sum to zero
               runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/ledger-imbalance.md
+
+  # Total outage: every payments-api target stops answering scrapes (zone
+  # loss). The burn-rate alerts have nothing to count; this one pages.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="fincore-cde/payments-api",pod="payments-api-a"}'
+        values: '1x5 0x10'
+      - series: 'up{job="fincore-cde/payments-api",pod="payments-api-b"}'
+        values: '1x5 0x10'
+      - series: 'up{job="fincore-cde/ledger",pod="ledger-a"}'
+        values: '1x15'
+    alert_rule_test:
+      - { eval_time: 5m, alertname: PaymentsAPIUnavailable, exp_alerts: [] }
+      - { eval_time: 6m, alertname: PaymentsAPIUnavailable, exp_alerts: [] }
+      - eval_time: 8m
+        alertname: PaymentsAPIUnavailable
+        exp_alerts:
+          - exp_labels: { severity: page, slo: payments-availability }
+            exp_annotations:
+              summary: No payments-api instance is reachable
+              runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
+      - { eval_time: 8m, alertname: LedgerUnavailable, exp_alerts: [] }
