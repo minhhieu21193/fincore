@@ -237,19 +237,25 @@ ok "gitserver ready"
 
 # ---------------------------------------------------------------- Argo CD
 log "Argo CD (chart $ARGOCD_CHART_VERSION)"
-# Retried: the chart comes from the internet, and a restore must not fail on a
-# network blip (it did once in a DR drill trial).
-for attempt in 1 2 3; do
-  helm upgrade --install argocd argo-cd \
-    --repo https://argoproj.github.io/argo-helm --version "$ARGOCD_CHART_VERSION" \
-    --namespace argocd --create-namespace \
-    -f "$ROOT/gitops/bootstrap/argocd/values.yaml" \
-    -f "$ROOT/gitops/bootstrap/argocd/values-kind.yaml" \
-    --wait --timeout 10m >/dev/null && break
-  (( attempt == 3 )) && die "Argo CD could not be installed"
-  warn "Argo CD install failed (attempt $attempt), retrying in $(( attempt * 20 ))s"
-  sleep $(( attempt * 20 ))
-done
+# The chart is fetched once into the pinned chart cache, then installed from
+# the local file: a restore must not depend on a chart repository being
+# reachable at that moment (a DR drill trial failed on a DNS outage).
+ARGOCD_TGZ="$ROOT/.tools/helm/charts/argo-cd-$ARGOCD_CHART_VERSION.tgz"
+if [[ ! -f "$ARGOCD_TGZ" ]]; then
+  mkdir -p "$(dirname "$ARGOCD_TGZ")"
+  for attempt in 1 2 3; do
+    helm pull argo-cd --repo https://argoproj.github.io/argo-helm --version "$ARGOCD_CHART_VERSION" \
+      -d "$(dirname "$ARGOCD_TGZ")" >/dev/null && break
+    (( attempt == 3 )) && die "could not download the Argo CD chart"
+    warn "Argo CD chart download failed (attempt $attempt), retrying in $(( attempt * 20 ))s"
+    sleep $(( attempt * 20 ))
+  done
+fi
+helm upgrade --install argocd "$ARGOCD_TGZ" \
+  --namespace argocd --create-namespace \
+  -f "$ROOT/gitops/bootstrap/argocd/values.yaml" \
+  -f "$ROOT/gitops/bootstrap/argocd/values-kind.yaml" \
+  --wait --timeout 10m >/dev/null
 ok "Argo CD ready"
 
 log "root application (app-of-apps, env=kind)"
