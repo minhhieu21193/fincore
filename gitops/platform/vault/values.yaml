@@ -23,11 +23,15 @@ injector:
     templateConfig:
       exitOnRetryFailure: true
   # Only the cardholder-data zone uses injection, and there it fails closed: a
-  # ledger pod is never created without its credentials agent.
-  namespaceSelector:
-    matchLabels:
-      fincore.io/zone: cde
-  failurePolicy: Fail
+  # ledger pod is never created without its credentials agent. (These keys
+  # live under `webhook`; the older top-level `failurePolicy` is overridden by
+  # the chart's `webhook.failurePolicy: Ignore` default, which let a ledger pod
+  # start without its agent in a Phase 3 run. `make check` now asserts Fail.)
+  webhook:
+    failurePolicy: Fail
+    namespaceSelector:
+      matchLabels:
+        fincore.io/zone: cde
   resources:
     requests: { cpu: 10m, memory: 32Mi }
     limits: { memory: 64Mi }

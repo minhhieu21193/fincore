@@ -81,6 +81,11 @@ kubeconform_envs() {
     scripts/render.sh "$env" "$out/$env" >/dev/null || return 1
   done
   scripts/ci/crd-schemas.sh "$out/kind" "$out/aws" "$out/schemas" || return 1
+  # Security invariant: the Vault injector fails closed in every environment.
+  for env in kind aws; do
+    [[ "$(yq 'select(.kind == "MutatingWebhookConfiguration" and .metadata.name == "vault-agent-injector-cfg") | .webhooks[].failurePolicy' "$out/$env/vault.yaml")" == Fail ]] ||
+      { echo "vault injector webhook must have failurePolicy Fail ($env)"; return 1; }
+  done
   for env in kind aws; do
     kubeconform -strict -summary -kubernetes-version "$K8S_VERSION" \
       -schema-location default \
