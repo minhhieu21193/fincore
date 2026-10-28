@@ -76,9 +76,14 @@ if [[ -n "$SNAPSHOT" ]]; then
   } | vault0 sh -s
   rm -f "$RESTORE_INIT"
   ok "snapshot restored; the temporary recovery key and root token no longer exist"
-  # During a restore Vault runs one node (restoreValues); the other two join
-  # once the restore hold is released.
-  wait_for "vault-0 to unseal with the original keyring" 300 bash -c \
+  # Restart the node: after `snapshot restore -force` it keeps the temporary
+  # cluster's Raft TLS identity in memory, and nodes that join later fail with
+  # "tls: unrecognized name" (seen in DR drill trials). Restarted, it unseals
+  # with the KMS key and serves the restored identity. During a restore Vault
+  # runs this one node (restoreValues); the other two join once the hold is
+  # released.
+  kubectl -n "$NS" delete pod vault-0 --wait=true >/dev/null
+  wait_for "vault-0 to come back unsealed with the original keyring" 300 bash -c \
     "kubectl -n $NS exec vault-0 -c vault -- vault status -format=json 2>/dev/null | jq -e '.initialized and (.sealed | not)' >/dev/null"
   ok "Vault restored on vault-0, unsealed with the original keyring"
   exit 0

@@ -76,4 +76,8 @@ ok "data restored from $snap_key and $dump_key"
 log "releasing the restore hold: database bootstrap, Vault configuration, services, backups"
 kubectl -n argocd patch application root --type merge \
   -p '{"spec":{"source":{"helm":{"parameters":[{"name":"restoreHold","value":"false"}]}}}}' >/dev/null
+# Only return once Argo CD has created what was held back; otherwise the caller
+# sees every *existing* application healthy and stops waiting too early.
+wait_for "Argo CD to create the held-back applications" "$STAGE_WAIT" \
+  kubectl -n argocd get applications.argoproj.io ledger payments-api backups
 ok "restore stages done in $(( SECONDS - RESTORE_START ))s"
