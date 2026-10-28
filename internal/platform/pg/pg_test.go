@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -119,5 +120,52 @@ func TestConnectPicksUpRotatedCredentials(t *testing.T) {
 	}
 	if got := testutil.ToFloat64(credentialChanges) - before; got != 1 {
 		t.Fatalf("credential changes counted = %v, want 1", got)
+	}
+}
+
+// A database that accepts the connection but never answers (or a dial to an
+// address that vanished) must not hold a pool slot for minutes: every new
+// connection gives up after DB_CONNECT_TIMEOUT.
+func TestConnectTimeoutBoundsANewConnection(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	accepted := make(chan net.Conn, 8)
+	go func() { // accept and stay silent
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			accepted <- c
+		}
+	}()
+	defer func() {
+		for len(accepted) > 0 {
+			_ = (<-accepted).Close()
+		}
+	}()
+	host, port, _ := net.SplitHostPort(ln.Addr().String())
+	t.Setenv("DB_HOST", host)
+	t.Setenv("DB_PORT", port)
+	t.Setenv("DB_NAME", "payments")
+	t.Setenv("DB_USER", "payments")
+	t.Setenv("DB_SSLMODE", "disable")
+	t.Setenv("DB_CONNECT_TIMEOUT", "300ms")
+
+	cfg, err := poolConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	conn, err := pgx.ConnectConfig(context.Background(), cfg.ConnConfig)
+	if err == nil {
+		_ = conn.Close(context.Background())
+		t.Fatal("connected to a server that never answers")
+	}
+	if took := time.Since(start); took > 2*time.Second {
+		t.Fatalf("gave up after %v, want about 300ms", took)
 	}
 }

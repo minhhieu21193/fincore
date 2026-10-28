@@ -42,6 +42,34 @@ var credentialChanges = promauto.With(httpx.Registry).NewCounter(prometheus.Coun
 // long a connection keeps using the credentials it was opened with; keep it well
 // below the credentials' remaining lifetime when they are rotated.
 func Connect(ctx context.Context) (*pgxpool.Pool, error) {
+	cfg, err := poolConfig()
+	if err != nil {
+		return nil, err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	// Wait for the database: on a fresh cluster it may start after the app.
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		pctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		err = pool.Ping(pctx)
+		cancel()
+		if err == nil {
+			return pool, nil
+		}
+		if time.Now().After(deadline) || ctx.Err() != nil {
+			pool.Close()
+			return nil, fmt.Errorf("database not reachable: %w", err)
+		}
+		slog.Warn("waiting for database", "error", err)
+		time.Sleep(2 * time.Second)
+	}
+}
+
+// poolConfig builds the pool configuration from the environment.
+func poolConfig() (*pgxpool.Config, error) {
 	credFile := os.Getenv("DB_CREDENTIALS_FILE")
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
@@ -85,6 +113,14 @@ func Connect(ctx context.Context) (*pgxpool.Pool, error) {
 	if cfg.HealthCheckPeriod, err = config.Duration("DB_HEALTH_CHECK_PERIOD", time.Minute); err != nil {
 		return nil, err
 	}
+	// Bound every new connection (dial, TLS, startup). Without it, a dial to a
+	// database address that just went away (a restart or failover) waits out
+	// the kernel's SYN retries, about 2 minutes, while holding one of the
+	// pool's slots: after a 6 s database restart, every slot was stuck and
+	// payments failed for 2 minutes (Phase 3 chaos test).
+	if cfg.ConnConfig.ConnectTimeout, err = config.Duration("DB_CONNECT_TIMEOUT", 5*time.Second); err != nil {
+		return nil, err
+	}
 
 	if pw := os.Getenv("DB_PASSWORD"); pw != "" {
 		cfg.ConnConfig.Password = pw
@@ -105,26 +141,7 @@ func Connect(ctx context.Context) (*pgxpool.Pool, error) {
 		}
 	}
 
-	pool, err := pgxpool.NewWithConfig(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	// Wait for the database: on a fresh cluster it may start after the app.
-	deadline := time.Now().Add(2 * time.Minute)
-	for {
-		pctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		err = pool.Ping(pctx)
-		cancel()
-		if err == nil {
-			return pool, nil
-		}
-		if time.Now().After(deadline) || ctx.Err() != nil {
-			pool.Close()
-			return nil, fmt.Errorf("database not reachable: %w", err)
-		}
-		slog.Warn("waiting for database", "error", err)
-		time.Sleep(2 * time.Second)
-	}
+	return cfg, nil
 }
 
 // Credentials is the content of DB_CREDENTIALS_FILE.
