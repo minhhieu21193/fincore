@@ -92,3 +92,6 @@ Problems the Phase 3 tests found in earlier phases' code, all fixed with tests a
 5. kube-prometheus-stack's runtime-patched webhook CA kept Argo CD in a sync loop. The CA bundle is now ignored.
 6. AWS (static): Vault's three replicas could never all schedule on a 2-node system group. The group now has 3 nodes.
 7. `deploy-kind.sh` could start a second canary before Argo CD applied the first; it now waits for Argo CD to apply the tag.
+8. The Vault injector never failed closed (Phase 2 values used the deprecated `injector.failurePolicy`). It now does, and `make check` asserts it.
+9. Argo CD sync waves could run ahead: a child Application looked Healthy before its first sync. Its health check now waits for that sync.
+10. Restore-specific (DR drill trials): backups named after their start time, Velero's schedule paused and Vault restored into one node (restarted after the snapshot) during a restore, the snapshot copy checksum-verified, the Argo CD chart installed from the pinned cache, client-side apply for Argo CD upgrades, and longer repo-server probes on kind.
