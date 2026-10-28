@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -179,5 +180,30 @@ func TestEntriesAreAppendOnly(t *testing.T) {
 		if _, err := pool.Exec(ctx, stmt); err == nil {
 			t.Errorf("%q succeeded; ledger must be append-only", stmt)
 		}
+	}
+}
+
+// A fleet-wide check runs once per interval, whichever replica asks.
+func TestClaimCheckOncePerInterval(t *testing.T) {
+	s, _ := newStore(t)
+	ctx := context.Background()
+	every := time.Second
+
+	claims := 0
+	for i := 0; i < 5; i++ { // five replicas asking at the same moment
+		ok, err := s.ClaimCheck(ctx, "imbalance", every)
+		if err != nil {
+			t.Fatalf("ClaimCheck: %v", err)
+		}
+		if ok {
+			claims++
+		}
+	}
+	if claims != 1 {
+		t.Fatalf("%d replicas ran the check, want exactly 1", claims)
+	}
+	time.Sleep(every + 100*time.Millisecond)
+	if ok, err := s.ClaimCheck(ctx, "imbalance", every); err != nil || !ok {
+		t.Fatalf("after the interval: ok=%v err=%v, want a new claim", ok, err)
 	}
 }

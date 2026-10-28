@@ -53,7 +53,7 @@ func run() error {
 	}
 
 	store := ledger.NewStore(pool)
-	go ledger.WatchInvariants(ctx, store, 15*time.Second)
+	go ledger.WatchInvariants(ctx, store, time.Minute)
 
 	mux := http.NewServeMux()
 	ledger.NewHandler(store).Register(mux)
