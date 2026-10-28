@@ -251,7 +251,10 @@ if [[ ! -f "$ARGOCD_TGZ" ]]; then
     sleep $(( attempt * 20 ))
   done
 fi
-helm upgrade --install argocd "$ARGOCD_TGZ" \
+# Client-side apply: re-running kind-up on an existing cluster then sends only
+# what changed. Server-side apply resends the very large ApplicationSet CRD,
+# which the kind API server (2 CPUs) could not process within its timeout.
+helm upgrade --install argocd "$ARGOCD_TGZ" --server-side=false \
   --namespace argocd --create-namespace \
   -f "$ROOT/gitops/bootstrap/argocd/values.yaml" \
   -f "$ROOT/gitops/bootstrap/argocd/values-kind.yaml" \
