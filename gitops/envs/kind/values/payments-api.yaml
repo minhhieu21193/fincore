@@ -1,7 +1,7 @@
 # kind: images are built, signed and pushed to the local registry (scripts/build-images.sh).
 image:
   repository: fincore-registry:5000/fincore/payments-api
-  tag: 0.1.1
+  tag: 0.1.2
   pullPolicy: IfNotPresent
 env:
   DB_HOST: postgres.fincore-data.svc.cluster.local
