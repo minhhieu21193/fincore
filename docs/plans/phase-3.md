@@ -71,3 +71,24 @@ The brief lists deliverables for Phase 3 but no acceptance line, so each deliver
 | Memory: about 2.5 GB is free on the 10 GB VM (the maximum allowed without the owner) | Monolithic Loki and Tempo with small limits; Fluent Bit instead of Alloy; no OTel collector; short retention; Velero node agent not needed (consistent app-level backups instead of volume copies) |
 | kind cannot sustain 300 RPS | Publish the measured maximum and why. The thresholds stay unchanged. |
 | A restore depends on ordering (KMS seed before Vault, dumps before the services) | Explicit restore stage in `kind-up.sh` before Argo CD syncs the services; drill asserts the ledger invariant |
+
+## As built: deviations and what the work found
+
+| Plan | As built | Why |
+|---|---|---|
+| Alertmanager's kind receiver is the demo webhook sink | Named `page` and `ticket` receivers with no integration in git; the chaos evidence reads each alert's receiver from Alertmanager's API | The sink accepts only HMAC-signed FinCore webhooks |
+| Burn-rate alerts cover availability | Plus `PaymentsAPIUnavailable` / `LedgerUnavailable` (no instance reachable for 1 minute) | In a total outage (zone loss), the servers report nothing, so a server-side burn rate has nothing to count |
+| Load test ramps to 300 payments/s | Steps 20–150/s, each judged against the SLOs; the highest step within them is published | The laptop-sized kind cluster serves the offered rate up to ~90/s, but its p99 stays ≤ 300 ms only at lower rates (single PostgreSQL stand-in's commit latency), and beyond ~110/s it falls over. Longer overloads destabilise the VM for the experiments that follow. |
+| Zone loss = cordon and drain one zone | Two experiments: `node-drain` (graceful, PDBs respected) and `zone-loss` (zone c frozen abruptly with `docker pause`) | One node per zone on kind makes "drain the zone" and "drain a node" the same thing; an abrupt loss is the harder, more realistic case |
+| Velero restores the cluster state | Velero restores the secrets git does not hold; Vault (Raft snapshot) and PostgreSQL (`pg_dumpall`) have their own consistent backups; `kind-up.sh --restore` orders them (restore hold in the app-of-apps) | Volume copies of running databases are not consistent; app-level backups are |
+| OpenCost with custom pricing on kind | Every kind node priced as an AWS m7g.large from the public price list, split per vCPU and GiB in OpenCost's own default ratio | kind has no price list; m7g.large is the system node type |
+
+Problems the Phase 3 tests found in earlier phases' code, all fixed with tests and released through canaries (details in `docs/decisions-log.md` and the two postmortems):
+
+1. The ledger's imbalance gauge scanned the whole ledger on every replica every 15 s, and became the database's largest load. Now one fleet-wide check per minute.
+2. Readiness pinged the database through the request pool, so pods flapped NotReady under load. Now it gates on dependencies only until they are first reached.
+3. Connection pools × autoscaling exceeded the database stand-in's memory. There is now a connection budget of 5 per pod and 100 at maximum replicas.
+4. No connect timeout: a 6 s database restart caused 2 minutes of failures. Now `DB_CONNECT_TIMEOUT` is 5 s.
+5. kube-prometheus-stack's runtime-patched webhook CA kept Argo CD in a sync loop. The CA bundle is now ignored.
+6. AWS (static): Vault's three replicas could never all schedule on a 2-node system group. The group now has 3 nodes.
+7. `deploy-kind.sh` could start a second canary before Argo CD applied the first; it now waits for Argo CD to apply the tag.
