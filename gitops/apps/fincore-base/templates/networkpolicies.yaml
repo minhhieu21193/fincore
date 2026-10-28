@@ -102,6 +102,13 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: traffic-generator
+        # The capacity test (scripts/loadtest.sh), a short-lived Job.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $np.appNamespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loadtest
         {{- range $np.ingressCidrs }}
         - ipBlock:
             cidr: {{ . }}
