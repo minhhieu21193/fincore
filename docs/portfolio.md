@@ -8,7 +8,7 @@
 
 ## Description (≤ 600 characters)
 
-FinCore is a payment platform built the way a regulated fintech runs one. It has a double-entry ledger enforced by the database and an isolated cardholder-data zone: signed images only, default-deny network, and per-pod database credentials from Vault. Releases are canaries that roll back by themselves when the SLO metrics drop. Everything is GitOps (Argo CD), observable (metrics, logs, traces, SLO burn-rate alerts), load-tested, chaos-tested, and restored from backups with measured RTO/RPO. Every AWS cost comes from public price lists.
+Payment platform built like a regulated fintech runs one: a double-entry ledger enforced by the database, an isolated cardholder-data zone (signed images only, default-deny network, per-pod Vault database users), and canary releases that roll themselves back on SLO metrics. GitOps with Argo CD, Grafana/Loki/Tempo, burn-rate alerts. Chaos-tested; the whole cluster restored from backups in 18 min (RPO under 9 min); AWS costs from public price lists.
 
 ## Skills (5)
 
@@ -26,4 +26,4 @@ FinCore is a payment platform built the way a regulated fintech runs one. It has
 
 1. **`docs/img/bad-release-rollback.png`**: "A deliberately bad release, caught by its own canary and rolled back automatically within about two minutes. Nobody touched it."
 2. **`docs/img/admission-policies.png`**: "11 admission tests against the live cluster: unsigned, unattested, root and off-zone workloads are rejected; the signed one is admitted by digest."
-3. **`docs/img/credential-rotation.png`**: "Vault issues each ledger pod its own short-lived database user. Rotation happens under live traffic with 0 errors and 0 restarts."
+3. **`docs/evidence/phase-3/grafana-slo-chaos.png`**: "Chaos run: pods killed, a node drained, the database restarted, a whole zone lost. Burn-rate alerts paged, then resolved; the ledger stayed balanced."

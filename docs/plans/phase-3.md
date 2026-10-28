@@ -1,5 +1,7 @@
 # Phase 3 plan: reliability, observability, cost
 
+> **Status: done.** Every criterion below was checked on kind on 2026-10-28; results and evidence in [`docs/phase-3-results.md`](../phase-3-results.md).
+
 Goal: the proof. FinCore is observable end to end (metrics, logs, traces, SLOs with burn-rate alerts), its limits are measured (load test), its failure modes are exercised (chaos, with postmortems), it can be restored into a new cluster with measured RTO/RPO, and its cost is known. The client-facing docs (ADRs, runbooks, demo script, portfolio, a README written as a case study) complete the project.
 
 As in Phases 1 and 2, everything is proven on `kind`. AWS-only parts (AWS FIS, Aurora failover and snapshots, real cost, `up.sh`/`down.sh`) are written and statically checked, never run.
