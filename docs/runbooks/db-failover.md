@@ -1,6 +1,6 @@
 # Database failover
 
-AWS: Aurora PostgreSQL (Serverless v2), a writer and a reader in different AZs. A failover promotes the reader in about 30 s; the cluster endpoint follows. kind: a single PostgreSQL pod; a restart is the closest equivalent.
+AWS: Aurora PostgreSQL (Serverless v2), a writer and a reader in different AZs. A failover promotes the reader, typically in under a minute; the cluster endpoint follows. kind: a single PostgreSQL pod; a restart is the closest equivalent.
 
 **What the services do:** payments-api and the ledger lose their connections. In-flight requests fail with 503 (`57P03 the database system is not yet accepting connections`, `connection refused`), and new connections succeed once the writer is back. Nothing needs a restart: pools reconnect (`DB_HEALTH_CHECK_PERIOD`). A client that retries a failed payment with the same `Idempotency-Key` gets exactly one payment. Events wait in the outbox and are published when the database is back.
 
@@ -9,7 +9,7 @@ AWS: Aurora PostgreSQL (Serverless v2), a writer and a reader in different AZs. 
 ```
 aws rds failover-db-cluster --db-cluster-identifier <name> --target-db-instance-identifier <reader>
 ```
-Announce it, watch FinCore / SLOs during it; expect a burst of 503s of about 30 s and no page (the 1 h / 5 m burn-rate pair needs a longer burn). `scripts/chaos-aws.sh` runs it as an experiment.
+Announce it, watch FinCore / SLOs during it; expect a burst of 503s lasting as long as the failover, and no page (the 1 h / 5 m burn-rate pair needs a longer burn). `scripts/chaos-aws.sh` runs it as an experiment.
 
 ## Unplanned
 
