@@ -10,7 +10,7 @@ source "$(dirname "$0")/lib.sh"
 need kind docker
 kind delete cluster --name "$CLUSTER"
 # Vault's recovery keys belong to the deleted cluster's Vault.
-rm -f "$KUBECONFIG" "$ROOT/.kube/kind-cluster.yaml" "$ROOT/.kube/vault-init.json"
+rm -f "$KUBECONFIG" "$ROOT/.kube/kind-cluster.yaml" "$ROOT/.kube/vault-init.json" "$ROOT/.kube/vault-restore-init.json"
 ok "kind cluster '$CLUSTER' deleted"
 if [[ "${1:-}" == "--purge" ]]; then
   docker rm -f "$REGISTRY_CONTAINER" "$S3_CONTAINER" >/dev/null 2>&1 || true

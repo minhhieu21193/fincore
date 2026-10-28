@@ -44,8 +44,11 @@ vault_status() { vault0 vault status -format=json 2>/dev/null || true; }
 wait_for "vault-0 to answer" 120 bash -c "kubectl -n $NS exec vault-0 -c vault -- vault status -format=json 2>/dev/null | jq -e 'has(\"initialized\")' >/dev/null"
 status="$(vault_status)"
 [[ -n "$status" ]] || die "could not read vault status from vault-0"
+# A restore keeps the temporary init output until it succeeds, so a failed
+# attempt (after init, before the snapshot is in) can be retried.
+RESTORE_INIT="$ROOT/.kube/vault-restore-init.json"
 if [[ "$(jq -r .initialized <<<"$status")" == true ]]; then
-  [[ -z "$SNAPSHOT" ]] || die "a restore needs a fresh Vault, and vault-0 is already initialised"
+  [[ -z "$SNAPSHOT" || -f "$RESTORE_INIT" ]] || die "a restore needs a fresh Vault, and vault-0 is already initialised"
   ok "Vault is already initialised (seal: $(jq -r .type <<<"$status"), sealed: $(jq -r .sealed <<<"$status"))"
   exit 0
 fi
@@ -60,16 +63,26 @@ wait_all_unsealed() {
 
 if [[ -n "$SNAPSHOT" ]]; then
   log "restoring Vault from $(basename "$SNAPSHOT") ($(wc -c < "$SNAPSHOT" | tr -d ' ') bytes)"
-  tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
-  vault0 vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > "$tmp"
+  if [[ ! -f "$RESTORE_INIT" ]]; then
+    ( umask 077; vault0 vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > "$RESTORE_INIT" )
+  fi
   wait_for "the temporary Vault to unseal" 120 bash -c "kubectl -n $NS exec vault-0 -c vault -- vault status -format=json 2>/dev/null | jq -e '.sealed == false' >/dev/null"
-  vault0 sh -c 'cat > /home/vault/restore.snap' < "$SNAPSHOT"
+  # kubectl exec's stdin can arrive truncated: copy, verify the checksum, retry.
+  want="$(shasum -a 256 "$SNAPSHOT" | awk '{print $1}')"
+  for attempt in 1 2 3; do
+    vault0 sh -c 'cat > /home/vault/restore.snap' < "$SNAPSHOT" || true
+    got="$(vault0 sha256sum /home/vault/restore.snap 2>/dev/null | awk '{print $1}')"
+    [[ "$got" == "$want" ]] && break
+    (( attempt == 3 )) && die "the snapshot did not arrive intact in vault-0 after 3 attempts"
+    warn "snapshot copy into vault-0 incomplete (attempt $attempt), retrying"
+    sleep 3
+  done
   # The token travels on stdin only.
-  { printf 'VAULT_TOKEN=%s\nexport VAULT_TOKEN\n' "$(jq -r .root_token "$tmp")"
+  { printf 'VAULT_TOKEN=%s\nexport VAULT_TOKEN\n' "$(jq -r .root_token "$RESTORE_INIT")"
     # shellcheck disable=SC2016 # expanded by the shell inside the pod
     echo 'vault operator raft snapshot restore -force /home/vault/restore.snap; rc=$?; rm -f /home/vault/restore.snap; exit $rc'
   } | vault0 sh -s
-  rm -f "$tmp"
+  rm -f "$RESTORE_INIT"
   ok "snapshot restored; the temporary recovery key and root token no longer exist"
   wait_all_unsealed
   ok "Vault HA restored: 3 nodes unsealed with the original keyring"
