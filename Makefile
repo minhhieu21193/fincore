@@ -65,6 +65,14 @@ demo-observability: ## Phase 3 C1: one payment followed from its trace to its lo
 dr-drill: ## Phase 3 C5: back up, delete the cluster, restore into a new one; RTO/RPO in docs/evidence/phase-3
 	scripts/dr-drill.sh
 
+.PHONY: aws-up
+aws-up: ## Create the AWS demo environment (spends money; FINCORE_AWS=confirm). Never run by CI
+	scripts/up.sh
+
+.PHONY: aws-down
+aws-down: ## Destroy it in order and check nothing billable is left (FINCORE_AWS=confirm)
+	scripts/down.sh
+
 .PHONY: vault-init
 vault-init: ## One-time Vault initialisation (run by kind-up; on EKS run it once by hand)
 	scripts/vault-init.sh
