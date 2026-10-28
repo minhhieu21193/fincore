@@ -17,6 +17,7 @@ components:
   fluent-bit: { enabled: true }
   dashboards: { enabled: true }
   slo: { enabled: true }
+  opencost: { enabled: true }
   velero: { enabled: true }
   backups: { enabled: true }
   kyverno: { enabled: true }

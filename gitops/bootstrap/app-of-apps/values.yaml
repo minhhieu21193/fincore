@@ -201,6 +201,14 @@ components:
     namespace: vault
     path: platform/backups
 
+  # Cost per namespace, workload and node (docs/cost.md).
+  opencost:
+    enabled: false
+    wave: -5
+    namespace: opencost
+    chart: { repo: https://opencost.github.io/opencost-helm-chart, name: opencost, version: 2.5.33 }
+    valueFiles: [platform/opencost/values.yaml]
+
   # SLO recording rules and burn-rate alerts (Alertmanager routes them).
   slo:
     enabled: false

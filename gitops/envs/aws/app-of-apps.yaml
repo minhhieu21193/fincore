@@ -76,6 +76,7 @@ components:
   fluent-bit: { enabled: true }
   dashboards: { enabled: true }
   slo: { enabled: true }
+  opencost: { enabled: true }
   aws-load-balancer-controller:
     enabled: true
     clusterValues: |
