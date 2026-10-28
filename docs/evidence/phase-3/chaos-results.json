@@ -1,0 +1,129 @@
+[
+  {
+    "experiment": "pod-kill",
+    "fault_at": 1793219509,
+    "fault_ended_at": 1793219510,
+    "recovered_at": 1793219510,
+    "ended_at": 1793219630,
+    "window_s": 131,
+    "client": {
+      "requests": 655,
+      "failed": 0,
+      "availability": 1.00000,
+      "longest_outage_s": 0.0,
+      "p99_ms": 1564
+    },
+    "server": {
+      "requests": 1901.83769755284,
+      "errors_5xx": 1.0916757639646997,
+      "max_p99_s": 2.351916860419037,
+      "baseline_rps": 14.953894011776468
+    },
+    "budget_burned_pct": 0,
+    "events": {
+      "published": 1879.5278694915344,
+      "received_by_notifier": 1922.4844234372576
+    },
+    "ledger_balanced": true,
+    "outbox_drained": true,
+    "notes": [
+      "killed payments-api-74675f959-jvhsz and ledger-bfc979bdb-2l62g (no grace period)"
+    ]
+  },
+  {
+    "experiment": "node-drain",
+    "fault_at": 1793219699,
+    "fault_ended_at": 1793219913,
+    "recovered_at": 1793219922,
+    "ended_at": 1793220042,
+    "window_s": 353,
+    "client": {
+      "requests": 1765,
+      "failed": 82,
+      "availability": 0.95354,
+      "longest_outage_s": 7.0,
+      "p99_ms": 413
+    },
+    "server": {
+      "requests": 3970.0731098295178,
+      "errors_5xx": 249.26904670969688,
+      "max_p99_s": 1.0579402884873896,
+      "baseline_rps": null
+    },
+    "budget_burned_pct": 0.6327307098765425,
+    "events": {
+      "published": 3723.8047171878434,
+      "received_by_notifier": 3696.568464776802
+    },
+    "ledger_balanced": true,
+    "outbox_drained": true,
+    "notes": [
+      "drained fincore-worker (zone a): 21 pods evicted, drain exit code 1",
+      "pending while the node was cordoned: argocd/argocd-application-controller-0 vault/vault-0 ",
+      "uncordoned after 214s"
+    ]
+  },
+  {
+    "experiment": "db-restart",
+    "fault_at": 1793220105,
+    "fault_ended_at": 1793220119,
+    "recovered_at": 1793220119,
+    "ended_at": 1793220239,
+    "window_s": 144,
+    "client": {
+      "requests": 716,
+      "failed": 31,
+      "availability": 0.95670,
+      "longest_outage_s": 6.4,
+      "p99_ms": 4996
+    },
+    "server": {
+      "requests": 2093.8298715932065,
+      "errors_5xx": 61.865600027214654,
+      "max_p99_s": 5,
+      "baseline_rps": 15.023117091954068
+    },
+    "budget_burned_pct": 0.24055555555555558,
+    "events": {
+      "published": 2036.229034194257,
+      "received_by_notifier": 2033.5771033250476
+    },
+    "ledger_balanced": true,
+    "outbox_drained": true,
+    "notes": [
+      "postgres-0 deleted and ready again after 14s"
+    ]
+  },
+  {
+    "experiment": "zone-loss",
+    "fault_at": 1793220302,
+    "fault_ended_at": 1793220543,
+    "recovered_at": 1793220556,
+    "ended_at": 1793220676,
+    "window_s": 384,
+    "client": {
+      "requests": 1918,
+      "failed": 1203,
+      "availability": 0.37278,
+      "longest_outage_s": 242.8,
+      "p99_ms": 5004
+    },
+    "server": {
+      "requests": 2418.6708187712197,
+      "errors_5xx": 379.90135946433134,
+      "max_p99_s": 5,
+      "baseline_rps": 15.089010373070018
+    },
+    "budget_burned_pct": 9.292148148148149,
+    "events": {
+      "published": 2041.8429229245758,
+      "received_by_notifier": 1976.5642779181267
+    },
+    "ledger_balanced": true,
+    "outbox_drained": true,
+    "notes": [
+      "zone c frozen (docker pause fincore-worker3: payments-api and ledger, the whole CDE) for 240s",
+      "zone c back; CDE ready 13s after the node returned"
+    ]
+  }
+]

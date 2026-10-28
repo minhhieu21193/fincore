@@ -1,0 +1,29 @@
+==> background traffic before the test: 10.1 payments/s (traffic generator)
+==> k6 Job loadtest-1793225918: steps 10,20,30,40,60,90 RPS, 20s ramp + 2m hold each, max 300 VUs
+==> running for about 14 min (started 2026-10-28T22:18:40Z)
+==> measuring each step in Prometheus (window: last 90s of each hold)
+# Load test: payments capacity on kind
+
+Run 2026-10-28 22:18 UTC: k6 in the cluster, steps of 10,20,30,40,60,90 payments/s, each ramped over 20s and held for 2m, at most 300 concurrent requests.
+Background traffic from the traffic generator (10.1 payments/s) is part of the offered rate.
+Every figure is server-side (Prometheus), over the last 90s of each hold.
+Cluster: kind, 1 control-plane node and 3 workers (one CDE) sharing a 6-CPU, 9 GB Docker VM.
+
+| Offered (req/s) | Served (req/s) | p50 | p95 | p99 | 5xx | payments-api pods | ledger pods | CPU payments-api / ledger / PostgreSQL / cluster (cores) | Within SLO |
+|---:|---:|---:|---:|---:|---:|---:|---:|---|:---:|
+| 20.1 | 19.9 | 123 ms | 149 ms | 191 ms | 0 % | 3 | 2 | 0.08 / 0.04 / 0.11 / 1.02 | yes |
+| 30.1 | 30.1 | 125 ms | 172 ms | 237 ms | 0 % | 3 | 2 | 0.1 / 0.07 / 0.19 / 1.48 | yes |
+| 40.1 | 39.9 | 127 ms | 193 ms | 357 ms | 0 % | 3 | 3 | 0.15 / 0.09 / 0.21 / 1.77 | **no** |
+| 50.1 | 49.3 | 141 ms | 2703 ms | 5000 ms | 0 % | 4 | 5 | 0.22 / 0.16 / 0.38 / 2.75 | **no** |
+| 70.1 | 67.3 | 142 ms | 3845 ms | 5000 ms | 0 % | 4 | 5 | 0.29 / 0.2 / 0.52 / 2.94 | **no** |
+| 100.1 | 58.2 | 2685 ms | 5000 ms | 5000 ms | 27.12 % | 6 | 6 | 0.35 / 0.28 / 0.65 / 4.03 | **no** |
+
+SLO per step: p99 <= 300 ms, 5xx <= 0.1 %, served >= 95 % of offered. The plan's target is 300 payments/s sustained within the SLOs.
+
+**Highest rate sustained within the SLOs: 20 payments/s offered by k6 (plus background).**
+
+k6 over the whole run: 30312 requests, 4247 dropped (concurrency limit reached), server errors 6.865 %, p99 9989 ms.
+
+Files: `loadtest-steps.json` (per step), `loadtest-timeseries.csv` (every 15 s), `loadtest-k6-summary.json` (client side).
+
+ ✔ load test report written to docs/evidence/phase-3/loadtest-calm/loadtest.md (highest step within SLO: 20)

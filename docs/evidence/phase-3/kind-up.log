@@ -1,0 +1,107 @@
+==> local PKI in <repo>/.kube/pki
+==> creating kind cluster 'fincore'
+Creating cluster "fincore" ...
+ • Ensuring node image (kindest/node:v1.36.4) 🖼️  ...
+ ✓ Ensuring node image (kindest/node:v1.36.4) 🖼️
+ • Preparing nodes 📦 📦 📦 📦   ...
+ ✓ Preparing nodes 📦 📦 📦 📦 
+ • Writing configuration 📜  ...
+ ✓ Writing configuration 📜
+ • Starting control-plane 🕹️  ...
+ ✓ Starting control-plane 🕹️
+ • Installing CNI 🔌  ...
+ ✓ Installing CNI 🔌
+ • Installing StorageClass 💾  ...
+ ✓ Installing StorageClass 💾
+ • Joining worker nodes 🚜  ...
+ ✓ Joining worker nodes 🚜
+ • Waiting ≤ 3m0s for control-plane = Ready ⏳  ...
+ ✓ Waiting ≤ 3m0s for control-plane = Ready ⏳
+ • Ready after 11s 💚
+Set kubectl context to "kind-fincore"
+You can now use your cluster with:
+
+kubectl cluster-info --context kind-fincore --kubeconfig <repo>/.kube/kind-config
+
+Not sure what to do next? 😅  Check out https://kind.sigs.k8s.io/docs/user/quick-start/
+ ✔ kubeconfig: <repo>/.kube/kind-config
+ ✔ registry ready
+==> backup store http://fincore-s3:8333 (SeaweedFS, outside the cluster)
+ ✔ backup store ready (bucket fincore-backups)
+==> node trust for fincore-registry:5000
+ ✔ nodes trust the registry CA
+==> building, publishing and signing images
+ ✔ built fincore/gitserver:local
+ ✔ loaded fincore/gitserver:local into kind/fincore
+ ✔ built fincore/payments-api:0.1.3 (fault_rate=0)
+ ✔ published fincore-registry:5000/fincore/payments-api:0.1.3 (signed, SBOM attested (60 packages))
+ ✔ built fincore/ledger:0.1.3 (fault_rate=0)
+ ✔ published fincore-registry:5000/fincore/ledger:0.1.3 (signed, SBOM attested (44 packages))
+ ✔ built fincore/notifier:0.1.0 (fault_rate=0)
+ ✔ published fincore-registry:5000/fincore/notifier:0.1.0 (signed, SBOM attested (55 packages))
+ ✔ built fincore/webhook-sink:0.1.0 (fault_rate=0)
+ ✔ published fincore-registry:5000/fincore/webhook-sink:0.1.0 (signed, SBOM attested (27 packages))
+==> local secrets (generated once, never committed)
+ ✔ created secret fincore-db-admin
+ ✔ created secret fincore-payments-db
+ ✔ created secret fincore-webhook-signing
+ ✔ created secret fincore-vault-db-admin
+ ✔ created local KMS seed
+==> git server (serves <repo>/.git read-only to Argo CD)
+ ✔ gitserver ready
+==> Argo CD (chart 10.11.1)
+ ✔ Argo CD ready
+==> root application (app-of-apps, env=kind)
+Warning: metadata.finalizers: "resources-finalizer.argocd.argoproj.io": prefer a domain-qualified finalizer name including a path (/) to avoid accidental conflicts with other finalizer writers
+==> waiting for every application to be Synced and Healthy (first run: ~5-10 min)
+==> initialising Vault (auto-unseal: awskms)
+ ✔ recovery keys written to <repo>/.kube/vault-init.json (5 shares, threshold 3)
+ ✔ vault-0 unsealed by KMS
+==> bootstrapping Kubernetes auth for the configuration job, then revoking the root token
+Success! Enabled kubernetes auth method at: kubernetes/
+Success! Revoked token (if it existed)
+ ✔ root token revoked; Vault is now configured only by the vault-config job
+ ✔ Vault HA: 3 nodes initialised and unsealed
+NAME                       SYNC STATUS   HEALTH STATUS
+argo-rollouts              Synced        Healthy
+backups                    Synced        Healthy
+cde-base                   Synced        Healthy
+cert-manager               Synced        Healthy
+cluster-issuers            Synced        Healthy
+dashboards                 Synced        Healthy
+external-secrets           Synced        Healthy
+fincore-base               Synced        Healthy
+fluent-bit                 Synced        Healthy
+kube-prometheus-stack      Synced        Healthy
+kyverno                    Synced        Healthy
+ledger                     Synced        Healthy
+local-infra                Synced        Healthy
+local-kms                  Synced        Healthy
+loki                       Synced        Healthy
+metrics-server             Synced        Healthy
+notifier                   Synced        Healthy
+opencost                   Synced        Healthy
+payments-api               Synced        Healthy
+policies                   Synced        Healthy
+prometheus-operator-crds   Synced        Healthy
+root                       Synced        Healthy
+secret-stores              Synced        Healthy
+slo                        Synced        Healthy
+tempo                      Synced        Healthy
+traffic-generator          Synced        Healthy
+vault                      Synced        Healthy
+vault-base                 Synced        Healthy
+vault-config               Synced        Healthy
+velero                     Synced        Healthy
+webhook-sink               Synced        Healthy
+ ✔ FinCore is up on kind (912s)
+
+  export KUBECONFIG=<repo>/.kube/kind-config
+  Argo CD UI:     kubectl -n argocd port-forward svc/argocd-server 8081:80   (user admin)
+                  kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+  Rollouts UI:    kubectl argo rollouts dashboard   (http://localhost:3100)
+  Payments API:   kubectl -n fincore-cde port-forward svc/payments-api 8080:8080
+  End-to-end:     make e2e
+  Bad release:    make demo-bad-release
+  Phase 2 demos:  make demo-policies | demo-netpol | demo-rotation
+  Vault recovery keys: <repo>/.kube/vault-init.json (local only)
