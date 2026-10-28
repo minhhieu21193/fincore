@@ -76,9 +76,12 @@ spec:
             periodSeconds: 15
             timeoutSeconds: 5
             failureThreshold: 6
+          # 128 MB of shared buffers plus a few MB per backend: 1 Gi holds the
+          # services' whole connection budget (100) with room to spare. At
+          # 512 Mi it was OOM-killed under load (decisions log, 2026-10-28).
           resources:
             requests: { cpu: 100m, memory: 256Mi }
-            limits: { memory: 512Mi }
+            limits: { memory: 1Gi }
           securityContext:
             allowPrivilegeEscalation: false
             capabilities: { drop: ["ALL"] }

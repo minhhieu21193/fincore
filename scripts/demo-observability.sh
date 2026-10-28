@@ -41,7 +41,17 @@ wait_for "port-forwards" 30 curl -sf "$GRAFANA/api/health"
 # Data sources are only listed to admins; the password is the chart's generated one.
 GRAFANA_AUTH="$(kubectl -n "$MON" get secret kube-prometheus-stack-grafana -o json |
   jq -r '"\(.data["admin-user"] | @base64d):\(.data["admin-password"] | @base64d)"')"
-grafana() { curl -sf -u "$GRAFANA_AUTH" "$GRAFANA$1"; }
+grafana() { # path -> body; retried, because a Grafana restart breaks the port-forward
+  local i
+  for i in 1 2 3 4 5; do
+    curl -sf --max-time 10 -u "$GRAFANA_AUTH" "$GRAFANA$1" && return 0
+    warn "Grafana request $1 failed (attempt $i), reconnecting"
+    kill "${PIDS[2]}" 2>/dev/null || true
+    forward "$MON" kube-prometheus-stack-grafana 18182 80; PIDS[2]="${PIDS[${#PIDS[@]}-1]}"
+    sleep 5
+  done
+  die "Grafana did not answer $1"
+}
 
 FAILURES=0
 check() { # description, then a command that succeeds when the check passes
@@ -129,7 +139,7 @@ RATE="$(prom 'sum(rate(payments_total[2m]))')"
 IMB="$(prom 'max(abs(ledger_imbalance_minor_units))')"
 CAPTURE="$(prom 'sum(rate(payments_total{status="captured"}[5m])) / sum(rate(payments_total[5m]))')"
 printf '   payments/s %.2f   capture rate %.1f%%   ledger imbalance %s\n' "$RATE" "$(jq -n "$CAPTURE * 100")" "$IMB"
-check "business dashboard: payments are flowing" jq -en "$RATE > 0"
+check "business dashboard: payments are flowing" test "$(jq -n "$RATE > 0" 2>/dev/null)" == true
 check "business dashboard: ledger imbalance is exactly 0" test "$IMB" == 0
 
 echo

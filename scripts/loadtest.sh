@@ -56,7 +56,6 @@ metadata:
   labels: { app.kubernetes.io/name: loadtest, app.kubernetes.io/part-of: fincore }
 spec:
   backoffLimit: 0
-  ttlSecondsAfterFinished: 3600
   template:
     metadata:
       labels: { app.kubernetes.io/name: loadtest, app.kubernetes.io/part-of: fincore }
@@ -93,7 +92,10 @@ spec:
         - name: tmp
           emptyDir: {}
 EOF
-cleanup() { kubectl -n "$NS_APP" delete configmap "$JOB" --ignore-not-found >/dev/null 2>&1 || true; }
+cleanup() { # never leave load running behind a failed script
+  kubectl -n "$NS_APP" delete job "$JOB" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+  kubectl -n "$NS_APP" delete configmap "$JOB" --ignore-not-found >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
 
 wait_for "k6 to start" 180 bash -c \
@@ -134,7 +136,7 @@ for step in "${STEP_LIST[@]}"; do
     --arg cpay "$cpu_pay" --arg cled "$cpu_led" --arg cpg "$cpu_pg" --arg call "$cpu_all" '
     def n: if . == "NaN" then null else tonumber end;
     . + [{step: $step, offered: ($step + ($base|n)), served: ($served|n), error_ratio: ($err|n),
-          p50_ms: (($p50|n) // 0) * 1000, p95_ms: (($p95|n) // 0) * 1000, p99_ms: (($p99|n) // 0) * 1000,
+          p50_ms: ((($p50|n) // 0) * 1000), p95_ms: ((($p95|n) // 0) * 1000), p99_ms: ((($p99|n) // 0) * 1000),
           payments_api_pods: ($pay|n), ledger_pods: ($led|n),
           cpu_payments_api: ($cpay|n), cpu_ledger: ($cled|n), cpu_postgres: ($cpg|n), cpu_cluster: ($call|n)}
          | .within_slo = (.served != null and .p99_ms <= 300 and (.error_ratio // 0) <= 0.001
