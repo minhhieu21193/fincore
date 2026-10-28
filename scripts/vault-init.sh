@@ -13,11 +13,24 @@
 #      a new root token can be generated with the recovery keys (break-glass).
 #
 # Idempotent: does nothing when Vault is already initialised.
+#
+#   scripts/vault-init.sh --restore <raft snapshot>
+#     Disaster recovery into a fresh, uninitialised Vault whose KMS key is the
+#     original one (restored first): initialise it, restore the snapshot over it
+#     with the temporary root token, and let it unseal with the original
+#     keyring. Policies, auth, the database engine and its rotated credentials
+#     all come back; the original recovery keys (kept offline) remain valid,
+#     and the temporary keys and token are discarded.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 need kubectl jq
 
+SNAPSHOT=""
+if [[ "${1:-}" == --restore ]]; then
+  SNAPSHOT="${2:?usage: $0 --restore <snapshot file>}"
+  [[ -s "$SNAPSHOT" ]] || die "snapshot $SNAPSHOT is missing or empty"
+fi
 NS="${VAULT_NAMESPACE:-vault}"
 OUT="${VAULT_INIT_FILE:-$ROOT/.kube/vault-init.json}"
 POLICY="$ROOT/gitops/platform/vault-config/files/policies/vault-configurer.hcl"
@@ -29,7 +42,34 @@ wait_for "vault-0 to run" 600 bash -c "[[ \$(kubectl -n $NS get pod vault-0 -o j
 status="$(vault0 vault status -format=json 2>/dev/null || true)"
 [[ -n "$status" ]] || die "could not read vault status from vault-0"
 if [[ "$(jq -r .initialized <<<"$status")" == true ]]; then
+  [[ -z "$SNAPSHOT" ]] || die "a restore needs a fresh Vault, and vault-0 is already initialised"
   ok "Vault is already initialised (seal: $(jq -r .type <<<"$status"), sealed: $(jq -r .sealed <<<"$status"))"
+  exit 0
+fi
+
+wait_all_unsealed() {
+  local i
+  for i in 0 1 2; do
+    wait_for "vault-$i to be initialised and unsealed" 300 bash -c \
+      "kubectl -n $NS exec vault-$i -c vault -- vault status -format=json 2>/dev/null | jq -e '.initialized and (.sealed | not)' >/dev/null"
+  done
+}
+
+if [[ -n "$SNAPSHOT" ]]; then
+  log "restoring Vault from $(basename "$SNAPSHOT") ($(wc -c < "$SNAPSHOT" | tr -d ' ') bytes)"
+  tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
+  vault0 vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > "$tmp"
+  wait_for "the temporary Vault to unseal" 120 bash -c "kubectl -n $NS exec vault-0 -c vault -- vault status -format=json 2>/dev/null | jq -e '.sealed == false' >/dev/null"
+  vault0 sh -c 'cat > /home/vault/restore.snap' < "$SNAPSHOT"
+  # The token travels on stdin only.
+  { printf 'VAULT_TOKEN=%s\nexport VAULT_TOKEN\n' "$(jq -r .root_token "$tmp")"
+    # shellcheck disable=SC2016 # expanded by the shell inside the pod
+    echo 'vault operator raft snapshot restore -force /home/vault/restore.snap; rc=$?; rm -f /home/vault/restore.snap; exit $rc'
+  } | vault0 sh -s
+  rm -f "$tmp"
+  ok "snapshot restored; the temporary recovery key and root token no longer exist"
+  wait_all_unsealed
+  ok "Vault HA restored: 3 nodes unsealed with the original keyring"
   exit 0
 fi
 

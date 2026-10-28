@@ -1,6 +1,7 @@
 {{- $root := . -}}
 {{- range $name, $c := .Values.components }}
-{{- if $c.enabled }}
+{{- /* During a restore (kind-up.sh --restore), components that need restored data wait. */}}
+{{- if and $c.enabled (not (and $root.Values.restoreHold $c.afterRestore)) }}
 {{- $ns := default $name $c.namespace }}
 {{- $valueFiles := list }}
 {{- range $c.valueFiles }}{{ $valueFiles = append $valueFiles . }}{{ end }}

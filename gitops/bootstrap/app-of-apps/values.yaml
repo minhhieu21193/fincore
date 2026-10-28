@@ -10,6 +10,8 @@
 #   clusterValues:  template rendered against these values into helm valuesObject
 #                   (used for account-specific values that never live in git)
 #   wave:           Argo CD sync wave (lower first)
+#   afterRestore:   held back while restoreHold is true: it needs data that a
+#                   disaster recovery restores first (scripts/kind-up.sh --restore)
 
 # -- Git repository Argo CD reads. Set per environment.
 repoURL: ""
@@ -17,10 +19,23 @@ targetRevision: HEAD
 # -- Environment name: kind | aws
 env: ""
 
+# -- Set by kind-up.sh --restore until secrets and data are restored.
+restoreHold: false
+
 # -- Cluster facts injected at bootstrap time (Terraform outputs on AWS). Never committed.
 cluster: {}
 
 components:
+  # Velero first: in a disaster recovery it restores the secrets everything
+  # else needs (the KMS key on kind) before the next wave starts.
+  velero:
+    enabled: false
+    wave: -12
+    namespace: velero
+    serverSideApply: true   # CRDs exceed the client-side last-applied annotation limit
+    chart: { repo: https://vmware-tanzu.github.io/helm-charts, name: velero, version: 12.2.1 }
+    valueFiles: [platform/velero/values.yaml]
+
   # ---------------------------------------------------------------- wave 0: controllers and CRDs
   argo-rollouts:
     enabled: false
@@ -177,6 +192,15 @@ components:
     namespace: monitoring
     repoPath: dashboards
 
+  # Scheduled backups to the object store: Vault Raft snapshots everywhere,
+  # PostgreSQL dumps on kind (Aurora backs itself up on AWS).
+  backups:
+    enabled: false
+    wave: 6
+    afterRestore: true
+    namespace: vault
+    path: platform/backups
+
   # SLO recording rules and burn-rate alerts (Alertmanager routes them).
   slo:
     enabled: false
@@ -225,6 +249,7 @@ components:
   # Namespace "fincore": services outside the cardholder-data zone.
   fincore-base:
     enabled: false
+    afterRestore: true
     wave: 5
     namespace: fincore
     path: apps/fincore-base
@@ -237,6 +262,7 @@ components:
   # Namespace "fincore-cde": the cardholder-data zone (payments-api, ledger, db-init).
   cde-base:
     enabled: false
+    afterRestore: true
     wave: 5
     namespace: fincore-cde
     path: apps/fincore-base
@@ -251,12 +277,14 @@ components:
   # created the roles Vault manages, before the ledger asks for credentials.
   vault-config:
     enabled: false
+    afterRestore: true
     wave: 6
     namespace: vault
     path: platform/vault-config
 
   ledger:
     enabled: false
+    afterRestore: true
     wave: 10
     namespace: fincore-cde
     path: charts/fincore-service
@@ -264,6 +292,7 @@ components:
 
   webhook-sink:
     enabled: false
+    afterRestore: true
     wave: 10
     namespace: fincore
     path: charts/fincore-service
@@ -271,6 +300,7 @@ components:
 
   payments-api:
     enabled: false
+    afterRestore: true
     wave: 15
     namespace: fincore-cde
     path: charts/fincore-service
@@ -278,6 +308,7 @@ components:
 
   notifier:
     enabled: false
+    afterRestore: true
     wave: 15
     namespace: fincore
     path: charts/fincore-service
@@ -285,6 +316,7 @@ components:
 
   traffic-generator:
     enabled: false
+    afterRestore: true
     wave: 20
     namespace: fincore
     path: apps/traffic-generator
