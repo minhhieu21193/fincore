@@ -68,6 +68,18 @@ components:
     serverSideApply: true
     chart: { repo: https://prometheus-community.github.io/helm-charts, name: kube-prometheus-stack, version: 92.13.1 }
     valueFiles: [platform/kube-prometheus-stack/values.yaml]
+    # The operator's admission webhooks get their CA bundle from the chart's
+    # patch Job at runtime. Without this, every sync re-ran the Job, the bundle
+    # changed, Argo CD saw drift and synced again (a loop of CRD and webhook
+    # applies that kept the API server busy).
+    ignoreDifferences:
+      - group: admissionregistration.k8s.io
+        kind: ValidatingWebhookConfiguration
+        jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+      - group: admissionregistration.k8s.io
+        kind: MutatingWebhookConfiguration
+        jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+    syncOptions: [RespectIgnoreDifferences=true]
 
   kyverno:
     enabled: false
