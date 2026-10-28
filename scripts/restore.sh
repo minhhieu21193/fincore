@@ -9,6 +9,10 @@
 #   3. data     the newest pg_dumpall into the empty PostgreSQL
 #   then the restore hold is released and GitOps brings up the rest.
 #
+# Vault runs a single node during the restore (restoreValues in the
+# app-of-apps); its other two nodes join after the hold is released, and
+# kind-up then waits for all three.
+#
 # STAGE_WAIT (default 1800 s): how long each stage waits for its component.
 # On kind most of it is image pulls into the brand-new nodes.
 set -euo pipefail

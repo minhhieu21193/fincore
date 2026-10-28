@@ -245,6 +245,13 @@ components:
     namespace: vault
     chart: { repo: https://helm.releases.hashicorp.com, name: vault, version: 0.34.1 }
     valueFiles: [platform/vault/values.yaml]
+    # A restore loads the Raft snapshot into a single node; the other two
+    # start when the hold is released and join the restored cluster. (Followers
+    # that joined during the restore kept the temporary cluster's TLS identity.)
+    restoreValues: |
+      server:
+        ha:
+          replicas: 1
     # The injector rotates its webhook CA bundle at runtime.
     ignoreDifferences:
       - group: admissionregistration.k8s.io

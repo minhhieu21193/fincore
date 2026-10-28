@@ -53,14 +53,6 @@ if [[ "$(jq -r .initialized <<<"$status")" == true ]]; then
   exit 0
 fi
 
-wait_all_unsealed() {
-  local i
-  for i in 0 1 2; do
-    wait_for "vault-$i to be initialised and unsealed" 300 bash -c \
-      "kubectl -n $NS exec vault-$i -c vault -- vault status -format=json 2>/dev/null | jq -e '.initialized and (.sealed | not)' >/dev/null"
-  done
-}
-
 if [[ -n "$SNAPSHOT" ]]; then
   log "restoring Vault from $(basename "$SNAPSHOT") ($(wc -c < "$SNAPSHOT" | tr -d ' ') bytes)"
   if [[ ! -f "$RESTORE_INIT" ]]; then
@@ -84,8 +76,11 @@ if [[ -n "$SNAPSHOT" ]]; then
   } | vault0 sh -s
   rm -f "$RESTORE_INIT"
   ok "snapshot restored; the temporary recovery key and root token no longer exist"
-  wait_all_unsealed
-  ok "Vault HA restored: 3 nodes unsealed with the original keyring"
+  # During a restore Vault runs one node (restoreValues); the other two join
+  # once the restore hold is released.
+  wait_for "vault-0 to unseal with the original keyring" 300 bash -c \
+    "kubectl -n $NS exec vault-0 -c vault -- vault status -format=json 2>/dev/null | jq -e '.initialized and (.sealed | not)' >/dev/null"
+  ok "Vault restored on vault-0, unsealed with the original keyring"
   exit 0
 fi
 
