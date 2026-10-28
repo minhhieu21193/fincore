@@ -25,10 +25,7 @@
      "type": "prometheus",
      "uid": "prometheus"
     },
-    "query": {
-     "query": "label_values(http_requests_total, app)",
-     "refId": "service"
-    },
+    "query": "label_values(http_requests_total, app)",
     "definition": "label_values(http_requests_total, app)",
     "refresh": 2,
     "current": {

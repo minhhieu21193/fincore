@@ -103,7 +103,8 @@ b.write("business.json")
 
 # ------------------------------------------------------------------ RED
 svc = {"name": "service", "label": "Service", "type": "query", "datasource": PROM,
-       "query": {"query": "label_values(http_requests_total, app)", "refId": "service"},
+       # A plain string: the object form left the variable empty in Grafana 12.
+       "query": "label_values(http_requests_total, app)",
        "definition": "label_values(http_requests_total, app)", "refresh": 2, "current": {"text": "payments-api", "value": "payments-api"},
        "includeAll": False, "multi": False}
 SEL = 'app="$service",route!~"GET /(healthz|readyz)"'
