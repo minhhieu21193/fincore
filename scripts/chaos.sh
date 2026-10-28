@@ -17,7 +17,10 @@
 #   server   Prometheus: requests, 5xx and p99 as payments-api counts them
 #   alerts   Alertmanager's API, polled every 15 s: what fired, when, to which receiver
 # and the invariants are checked after it: the ledger balances and the outbox drains.
-# At the end the script waits for every alert to resolve (up to RESOLVE_WAIT s).
+# Before the first experiment no page may be firing (so every page is caused by
+# an experiment); at the end the script waits for every page to resolve (up to
+# RESOLVE_WAIT s). Tickets are slow-burn alerts by design (2 h and 6 h short
+# windows): they are reported, not waited for.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -27,6 +30,7 @@ OUT="${1:-$ROOT/docs/evidence/phase-3}"
 EXPERIMENTS="${EXPERIMENTS:-pod-kill node-drain db-restart zone-loss}"
 ZONE_LOSS_SECONDS="${ZONE_LOSS_SECONDS:-240}"
 RESOLVE_WAIT="${RESOLVE_WAIT:-2700}"
+CLEAN_WAIT="${CLEAN_WAIT:-2700}"
 PROBE_RATE=5
 mkdir -p "$OUT"
 RUN="$(date +%s)"
@@ -47,7 +51,7 @@ utc() { date -u -r "$1" '+%H:%M:%S' 2>/dev/null || date -u -d "@$1" '+%H:%M:%S';
 PAY='app="payments-api",route="POST /v1/payments"'
 
 cleanup() {
-  for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null || true; done
+  for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null || true; wait "$p" 2>/dev/null || true; done
   docker unpause fincore-worker3 >/dev/null 2>&1 || true
   kubectl uncordon fincore-worker >/dev/null 2>&1 || true
   kubectl -n "$NS_APP" delete job "$PROBE" --ignore-not-found --wait=false >/dev/null 2>&1 || true
@@ -55,6 +59,17 @@ cleanup() {
   rm -rf "$WORK"
 }
 trap cleanup EXIT
+
+# ---------------------------------------------------------------- start clean
+pages_active() {
+  kubectl get --raw "$AM/alerts?active=true&silenced=false&inhibited=false" 2>/dev/null |
+    jq '[.[] | select(.labels.severity == "page")] | length'
+}
+log "waiting until no page is firing (up to ${CLEAN_WAIT}s), so every page below comes from an experiment"
+t=$SECONDS
+until [[ "$(pages_active)" == 0 ]] || (( SECONDS - t > CLEAN_WAIT )); do sleep 30; done
+[[ "$(pages_active)" == 0 ]] || die "pages still firing after ${CLEAN_WAIT}s; not starting"
+ok "no page firing ($(( SECONDS - t ))s)"
 
 # ---------------------------------------------------------------- client probe
 cat > "$WORK/probe.js" <<'JS'
@@ -161,6 +176,7 @@ ledger_balanced() { # fresh port-forward each time: a pod behind an old one may 
   curl -sf --max-time 3 http://localhost:18281/readyz >/dev/null 2>&1 || rc=1
   [[ $rc == 0 ]] && { curl -sf --max-time 5 http://localhost:18281/v1/invariants | jq -e '.balanced == true' >/dev/null || rc=1; }
   kill "$pf" 2>/dev/null || true
+  wait "$pf" 2>/dev/null || true
   return $rc
 }
 outbox_drained() { [[ "$(promq 'max(outbox_backlog_events)' "$(date +%s)")" == 0 ]]; }
@@ -276,13 +292,13 @@ done
 
 # ---------------------------------------------------------------- wait for alerts to resolve
 echo
-log "waiting for every alert to resolve (up to ${RESOLVE_WAIT}s; the 6h/30m page pair holds for ~30 min after an outage)"
-active() { kubectl get --raw "$AM/alerts?active=true" 2>/dev/null | jq '[.[] | select(.labels.alertname != "Watchdog" and .labels.alertname != "InfoInhibitor")] | length'; }
+log "waiting for every page to resolve (up to ${RESOLVE_WAIT}s; the 6h/30m page pair holds for ~30 min after an outage)"
 t=$SECONDS
-until [[ "$(active)" == 0 ]] || (( SECONDS - t > RESOLVE_WAIT )); do sleep 30; done
+until [[ "$(pages_active)" == 0 ]] || (( SECONDS - t > RESOLVE_WAIT )); do sleep 30; done
 T_DONE="$(date +%s)"
 sleep 20
-STILL="$(active)"
+STILL="$(pages_active)"
+TICKETS="$(kubectl get --raw "$AM/alerts?active=true" 2>/dev/null | jq -r '[.[] | select(.labels.severity == "ticket") | .labels.alertname] | unique | join(", ")')"
 
 # Alert timeline: first and last time each alert was seen active, with its receivers.
 TIMELINE="$(sort -n "$ALERTS_RAW" | awk -F'\t' '
@@ -320,10 +336,11 @@ TIMELINE="$(sort -n "$ALERTS_RAW" | awk -F'\t' '
   fi
   echo
   if [[ "$STILL" == 0 ]]; then
-    echo "All alerts resolved by $(utc "$T_DONE") UTC."
+    echo "Every page resolved by $(utc "$T_DONE") UTC."
   else
-    echo "**$STILL alert(s) still active after waiting ${RESOLVE_WAIT}s.**"
+    echo "**$STILL page(s) still firing after waiting ${RESOLVE_WAIT}s.**"
   fi
+  [[ -n "$TICKETS" ]] && echo "Tickets still open at the end (slow-burn by design, 2 h / 6 h short windows): $TICKETS."
   echo
   echo "Experiment times (UTC): $(jq -r '[.[] | "\(.experiment) \(.fault_at | strftime("%H:%M:%S"))-\(.recovered_at | strftime("%H:%M:%S"))"] | join(", ")' <<<"$RESULTS")."
   echo "Files: \`chaos-results.json\`, \`chaos-alerts.tsv\` (every Alertmanager poll), \`chaos-probe.log\` (every probe request)."
@@ -335,5 +352,5 @@ cat "$OUT/chaos.md"
 echo
 FAILED_INV="$(jq '[.[] | select((.ledger_balanced and .outbox_drained) | not)] | length' <<<"$RESULTS")"
 [[ "$FAILED_INV" == 0 ]] || die "$FAILED_INV experiment(s) broke an invariant"
-[[ "$STILL" == 0 ]] || die "alerts did not resolve"
-ok "CHAOS DONE: every experiment recovered, the ledger stayed balanced, all alerts resolved"
+[[ "$STILL" == 0 ]] || die "pages did not resolve"
+ok "CHAOS DONE: every experiment recovered, the ledger stayed balanced, every page resolved"
