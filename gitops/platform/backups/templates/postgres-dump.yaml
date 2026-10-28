@@ -1,0 +1,56 @@
+{{- if .Values.postgres.enabled }}
+# pg_dumpall: roles (with their password hashes) and every database, each
+# database dumped in one consistent transaction. Restored by
+# scripts/kind-up.sh --restore into the empty database of a new cluster.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-dump
+  namespace: {{ .Values.postgres.namespace }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: postgres-backup
+            app.kubernetes.io/part-of: fincore
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            {{- include "backups.podSecurity" . | nindent 12 }}
+          initContainers:
+            - name: dump
+              image: {{ .Values.images.postgres }}
+              command: ["/bin/sh", "-ec"]
+              args:
+                - >-
+                  set -o pipefail;
+                  pg_dumpall -h "$PGHOST" -U postgres | gzip > /backup/postgres.sql.gz;
+                  echo "dump taken ($(wc -c < /backup/postgres.sql.gz) bytes compressed)"
+              env:
+                - { name: PGHOST, value: {{ .Values.postgres.host | quote }} }
+                - name: PGPASSWORD
+                  valueFrom: { secretKeyRef: { name: {{ .Values.postgres.adminSecret }}, key: password } }
+              resources:
+                requests: { cpu: 20m, memory: 32Mi }
+                limits: { memory: 128Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts:
+                - { name: backup, mountPath: /backup }
+          containers:
+            {{- include "backups.uploader" (dict "root" $ "file" "postgres.sql.gz" "prefix" "postgres" "ext" "sql.gz") | nindent 12 }}
+          volumes:
+            - { name: backup, emptyDir: {} }
+            - { name: tmp, emptyDir: {} }
+{{- end }}

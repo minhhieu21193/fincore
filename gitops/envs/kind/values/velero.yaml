@@ -1,0 +1,16 @@
+# kind: the backup store is SeaweedFS outside the cluster (scripts/kind-up.sh),
+# with static keys in velero/velero-s3 (created by kind-up, never committed).
+credentials:
+  useSecret: true
+  existingSecret: velero-s3
+configuration:
+  backupStorageLocation:
+    - name: default
+      provider: aws
+      bucket: fincore-backups
+      prefix: velero
+      default: true
+      config:
+        region: us-east-1
+        s3ForcePathStyle: "true"
+        s3Url: http://fincore-s3:8333

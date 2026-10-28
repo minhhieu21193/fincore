@@ -1,0 +1,5 @@
+apiVersion: v2
+name: backups
+description: Scheduled, application-consistent backups to the object store (Vault Raft snapshots; PostgreSQL dumps on kind).
+type: application
+version: 0.1.0
