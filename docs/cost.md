@@ -10,7 +10,7 @@ What the AWS demo environment costs to run, built from AWS's public price list f
 | **Per day** | **34.33** |
 | **Per 30 days** | **1030** |
 | Spot share | 3 of 9 nodes (23 % of node cost); Spot saves $3.43/day against on-demand for the same pool |
-| Cost per 1,000 payments | pending (see [below](#cost-per-1000-payments)) |
+| **Cost per 1,000 payments** | **$0.046** at the demo's 10 payments/s; $0.019 at 30/s ([below](#cost-per-1000-payments)) |
 
 `scripts/down.sh` stops all of it except the Terraform state bucket (a few cents a month). For a demo that runs 8 hours, `up.sh` → demo → `down.sh` costs about $11.
 
@@ -56,4 +56,28 @@ The Route 53 hosted zone already exists (it is looked up, not created), so it is
 
 ## Cost per 1,000 payments
 
-**Pending.** This needs the sustained throughput from the Phase 3 load test (`docs/evidence/phase-3/loadtest.md`), which is not measured yet: so far kind saturates its 6-CPU VM below 60 payments/s (decisions log, 2026-10-28).
+Fixed cost divided by payments per hour, plus the per-payment charges:
+
+| Per 1,000 payments | At the demo's traffic (10/s) | At the highest rate kind sustained within the SLOs (30/s) |
+|---|---:|---:|
+| Fixed (the idle environment above, $1.43/h) | $0.040 | $0.013 |
+| Variable: SQS (≤ 3 requests per payment at $0.40/M), WAF (1 request at $0.60/M), Aurora I/O (**assumed** 20 per payment at $0.22/M) | $0.006 | $0.006 |
+| **Total** | **$0.046** | **$0.019** |
+
+The 30/s is measured on the laptop (`docs/evidence/phase-3/loadtest-calm/`). On AWS the same footprint serves more before it scales, so the per-payment cost there would be at most this. Above the floor, Aurora adds $0.20 per ACU-hour, Karpenter adds about $0.054 per Spot node-hour, and the ALB adds LCUs (one LCU covers 25 new connections per second).
+
+## OpenCost on kind
+
+OpenCost runs on kind with every node priced as an m7g.large (`gitops/envs/kind/values/opencost.yaml`). Over the 71 minutes of the evidence run's chaos and load test, it allocated **$0.20** of compute to workloads (`docs/evidence/phase-3/opencost-allocation.json`):
+
+| Namespace | USD |
+|---|---:|
+| kube-system (control plane, CNI) | 0.073 |
+| monitoring | 0.028 |
+| fincore-cde (payments-api, ledger) | 0.028 |
+| fincore-data (database and queue stand-ins) | 0.016 |
+| argocd | 0.015 |
+| fincore (notifier, webhook sink, traffic) | 0.014 |
+| everything else | 0.025 |
+
+Four nodes at that price cost about $0.49 for the same window, so about 60 % of the capacity was idle: normal for a demo-sized platform, and the reason the AWS floor above is set by zones rather than load.
