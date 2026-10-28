@@ -82,7 +82,7 @@ loadtest: ## k6 load test against a port-forwarded payments-api (RPS=50 DURATION
 	k6 run -e TARGET=$${TARGET:-http://localhost:8080} -e RPS=$${RPS:-50} -e DURATION=$${DURATION:-2m} loadtest/payments.js
 
 .PHONY: loadtest-report
-loadtest-report: ## Phase 3 C3: in-cluster capacity test, steps up to 300 RPS, report in docs/evidence/phase-3 (STEPS=... HOLD=2m)
+loadtest-report: ## Phase 3 C3: in-cluster capacity test, steps 20 to 150 payments/s, report in docs/evidence/phase-3 (STEPS=... HOLD=2m)
 	scripts/loadtest.sh
 
 .PHONY: chaos

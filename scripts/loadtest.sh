@@ -4,7 +4,12 @@
 # measured server-side from Prometheus and judged against the payments SLOs.
 #
 #   scripts/loadtest.sh [output-dir]          # default docs/evidence/phase-3
-#   STEPS=50,100,150,200,250,300 HOLD=2m scripts/loadtest.sh
+#   STEPS=50,100,200,300 HOLD=2m scripts/loadtest.sh
+#
+# The plan's target is 300 payments/s. The default steps stop at 150: on the
+# laptop-sized kind cluster the platform already falls over beyond ~100/s
+# (tail latency first, then errors), and longer overloads only destabilise the
+# VM for the experiments that follow. The report says so.
 #
 # A step is "within SLO" when, over its hold (first 30 s excluded):
 #   p99 <= 300 ms, 5xx <= 0.1 %, and the rate served >= 95 % of the rate offered.
@@ -20,7 +25,7 @@ source "$(dirname "$0")/lib.sh"
 need kubectl jq yq
 
 OUT="${1:-$ROOT/docs/evidence/phase-3}"
-STEPS="${STEPS:-50,100,150,200,250,300}"
+STEPS="${STEPS:-20,30,40,50,60,80,100,150}"
 HOLD="${HOLD:-2m}"
 MAX_VUS="${MAX_VUS:-300}"
 RAMP=20
@@ -174,7 +179,7 @@ BEST="$(jq -r '[.[] | select(.within_slo) | .step] | max // "none"' <<<"$ROWS")"
   echo "|---:|---:|---:|---:|---:|---:|---:|---:|---|:---:|"
   jq -r '.[] | "| \(.offered | . * 10 | round / 10) | \((.served // 0) | . * 10 | round / 10) | \(.p50_ms | round) ms | \(.p95_ms | round) ms | \(.p99_ms | round) ms | \(((.error_ratio // 0) * 100) | . * 100 | round / 100) % | \(.payments_api_pods // "?") | \(.ledger_pods // "?") | \([.cpu_payments_api, .cpu_ledger, .cpu_postgres, .cpu_cluster] | map((. // 0) * 100 | round / 100 | tostring) | join(" / ")) | \(if .within_slo then "yes" else "**no**" end) |"' <<<"$ROWS"
   echo
-  echo "SLO per step: p99 <= 300 ms, 5xx <= 0.1 %, served >= 95 % of offered."
+  echo "SLO per step: p99 <= 300 ms, 5xx <= 0.1 %, served >= 95 % of offered. The plan's target is 300 payments/s sustained within the SLOs."
   echo
   if [[ "$BEST" == none ]]; then
     echo "**Highest rate sustained within the SLOs: none of the steps.**"
