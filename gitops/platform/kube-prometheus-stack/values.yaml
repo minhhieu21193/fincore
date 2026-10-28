@@ -19,9 +19,10 @@ grafana:
       check_for_plugin_updates: false
     users:
       default_theme: light
+  # 384 Mi was OOM-killed rendering the SLO dashboard over an hour of chaos data.
   resources:
-    requests: { cpu: 25m, memory: 128Mi }
-    limits: { memory: 384Mi }
+    requests: { cpu: 25m, memory: 192Mi }
+    limits: { memory: 768Mi }
   sidecar:
     resources:
       requests: { cpu: 5m, memory: 48Mi }
