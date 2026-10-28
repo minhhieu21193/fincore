@@ -39,7 +39,10 @@ vault0() { kubectl -n "$NS" exec -i vault-0 -c vault -- "$@"; }
 
 wait_for "vault-0 to run" 600 bash -c "[[ \$(kubectl -n $NS get pod vault-0 -o jsonpath='{.status.containerStatuses[0].started}' 2>/dev/null) == true ]]"
 # `vault status` exits 2 when sealed/uninitialised; the JSON is still printed.
-status="$(vault0 vault status -format=json 2>/dev/null || true)"
+# The container can be "started" a moment before Vault listens: poll.
+vault_status() { vault0 vault status -format=json 2>/dev/null || true; }
+wait_for "vault-0 to answer" 120 bash -c "kubectl -n $NS exec vault-0 -c vault -- vault status -format=json 2>/dev/null | jq -e 'has(\"initialized\")' >/dev/null"
+status="$(vault_status)"
 [[ -n "$status" ]] || die "could not read vault status from vault-0"
 if [[ "$(jq -r .initialized <<<"$status")" == true ]]; then
   [[ -z "$SNAPSHOT" ]] || die "a restore needs a fresh Vault, and vault-0 is already initialised"
