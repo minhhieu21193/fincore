@@ -298,6 +298,9 @@ until [[ "$(pages_active)" == 0 ]] || (( SECONDS - t > RESOLVE_WAIT )); do sleep
 T_DONE="$(date +%s)"
 sleep 20
 STILL="$(pages_active)"
+RUN_W=$(( $(date +%s) - RUN + 60 ))
+RUN_PUBLISHED="$(promq "sum(increase(outbox_events_published_total[${RUN_W}s]))" "$(date +%s)")"
+RUN_RECEIVED="$(promq "sum(increase(events_received_total[${RUN_W}s]))" "$(date +%s)")"
 TICKETS="$(kubectl get --raw "$AM/alerts?active=true" 2>/dev/null | jq -r '[.[] | select(.labels.severity == "ticket") | .labels.alertname] | unique | join(", ")')"
 
 # Alert timeline: first and last time each alert was seen active, with its receivers.
@@ -320,7 +323,11 @@ TIMELINE="$(sort -n "$ALERTS_RAW" | awk -F'\t' '
   jq -r '.[] | "| \(.experiment) | \(.fault_ended_at - .fault_at) s | \(.client.availability * 100 | . * 100 | round / 100) % | \(.client.longest_outage_s) s | \(.client.p99_ms) ms | \((.server.errors_5xx // 0) | round) / \((.server.requests // 0) | round) | \(((.server.max_p99_s // 0) * 1000) | round) ms | \(.budget_burned_pct | . * 100 | round / 100) % | \(if .ledger_balanced then "yes" else "**no**" end) | \(if .outbox_drained then "yes" else "**no**" end) |"' <<<"$RESULTS"
   echo
   echo "## What happened"
-  jq -r '.[] | "\n**\(.experiment)** (\(.fault_at | strftime("%H:%M:%S")) UTC): \(.notes | join("; ")). Outbox events published in the window: \((.events.published // 0) | round), received by the notifier: \((.events.received_by_notifier // 0) | round)."' <<<"$RESULTS"
+  jq -r '.[] | "\n**\(.experiment)** (\(.fault_at | strftime("%H:%M:%S")) UTC): \(.notes | join("; "))."' <<<"$RESULTS"
+  echo
+  # Across the whole run: per-window counts mislead when notifier pods are
+  # rescheduled mid-window (new counters), whole-run totals do not.
+  echo "Events across the whole run: $(printf '%.0f' "$RUN_PUBLISHED") published from the outbox, $(printf '%.0f' "$RUN_RECEIVED") received by the notifier."
   echo
   echo "## Alerts"
   echo
