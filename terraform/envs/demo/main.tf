@@ -96,6 +96,14 @@ module "backups" {
   tags        = local.tags
 }
 
+module "chaos" {
+  source      = "../../modules/chaos"
+  name        = local.name
+  zone        = module.network.azs[0]
+  subnet_arns = [module.network.private_subnet_arns[0], module.network.database_subnet_arns[0]]
+  tags        = local.tags
+}
+
 module "aurora" {
   source               = "../../modules/aurora"
   name                 = local.name
