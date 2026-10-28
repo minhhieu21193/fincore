@@ -61,6 +61,10 @@ demo-rotation: ## Phase 2 B2: the ledger's Vault-issued DB credentials rotate wi
 demo-observability: ## Phase 3 C1: one payment followed from its trace to its logs to its ledger entry; dashboards have data
 	scripts/demo-observability.sh
 
+.PHONY: dr-drill
+dr-drill: ## Phase 3 C5: back up, delete the cluster, restore into a new one; RTO/RPO in docs/evidence/phase-3
+	scripts/dr-drill.sh
+
 .PHONY: vault-init
 vault-init: ## One-time Vault initialisation (run by kind-up; on EKS run it once by hand)
 	scripts/vault-init.sh

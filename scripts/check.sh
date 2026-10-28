@@ -66,6 +66,8 @@ helm_lint() {
   "${lint[@]}" policies &&
   "${lint[@]}" dashboards &&
   "${lint[@]}" gitops/platform/slo &&
+  "${lint[@]}" gitops/platform/backups -f gitops/envs/kind/values/backups.yaml &&
+  "${lint[@]}" gitops/platform/backups --set uploader=aws-cli &&
   "${lint[@]}" policies --set signature.mode=keyless &&
   "${lint[@]}" gitops/apps/fincore-base -f gitops/apps/cde-base/values.yaml &&
   "${lint[@]}" gitops/bootstrap/app-of-apps -f gitops/envs/kind/app-of-apps.yaml &&
