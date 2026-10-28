@@ -40,6 +40,7 @@ spec:
               command: ["/bin/sh", "-ec"]
               args:
                 - >-
+                  date -u +%Y%m%dT%H%M%SZ > /backup/started;
                   VAULT_TOKEN="$(vault write -field=token auth/kubernetes/login role=vault-snapshot jwt=@/var/run/secrets/vault/token)";
                   export VAULT_TOKEN;
                   vault operator raft snapshot save /backup/vault.snap;

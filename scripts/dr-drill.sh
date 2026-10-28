@@ -40,7 +40,7 @@ say "1. before the disaster"
 kubectl get nodes >/dev/null || die "no cluster to destroy (run scripts/kind-up.sh first)"
 newest_velero() {
   kubectl -n velero get backups.velero.io -l velero.io/schedule-name=velero-cluster-state -o json |
-    jq -r '[.items[] | select(.status.phase == "Completed")] | sort_by(.status.completionTimestamp) | last | "\(.metadata.name) \(.status.completionTimestamp)"'
+    jq -r '[.items[] | select(.status.phase == "Completed")] | sort_by(.status.startTimestamp) | last | "\(.metadata.name) \(.status.startTimestamp)"'
 }
 # The store outlives clusters: only backups taken by this cluster count.
 CLUSTER_T="$(kubectl get namespace kube-system -o jsonpath='{.metadata.creationTimestamp}')"
@@ -125,7 +125,7 @@ RPO_VAULT=$(( T_DISASTER - VAULT_T ))
 RPO_STATE=$(( T_DISASTER - VELERO_T ))
 RTO=$(( T_FIRST - T_DISASTER ))
 FAIL=0
-[[ "$PAY_AFTER" == "$PAY_AT_DUMP" ]] || FAIL=1
+(( PAY_AFTER >= PAY_AT_DUMP )) || FAIL=1   # every payment older than the dump is back
 [[ "$IMB_AFTER" == 0 ]] || FAIL=1
 [[ "$SAMPLE_BACK" == captured ]] || FAIL=1
 [[ "$VAULT_OK" == 3 ]] || FAIL=1
@@ -139,7 +139,7 @@ FAIL=0
   echo "|---|---|"
   echo "| **RTO** (disaster to first successful payment) | **$(( RTO / 60 )) min $(( RTO % 60 )) s** |"
   echo "| **RPO** (age of the newest data backup at the disaster) | **$(( RPO_DATA / 60 )) min $(( RPO_DATA % 60 )) s** (PostgreSQL dump); Vault snapshot $(( RPO_VAULT / 60 )) min $(( RPO_VAULT % 60 )) s; Velero cluster state $(( RPO_STATE / 60 )) min $(( RPO_STATE % 60 )) s |"
-  echo "| Payments | $PAY_BEFORE before; $PAY_AFTER restored, exactly the $PAY_AT_DUMP in the newest dump; $(( PAY_BEFORE - PAY_AFTER )) made after it were lost (within the RPO) |"
+  echo "| Payments | $PAY_BEFORE before; $PAY_AFTER restored, including all $PAY_AT_DUMP created before the newest dump started; $(( PAY_BEFORE - PAY_AFTER )) made after the dump were lost (within the RPO) |"
   echo "| Ledger | $LEDGER_AFTER of $LEDGER_BEFORE transactions restored; imbalance $IMB_BEFORE before, **$IMB_AFTER after** |"
   echo "| Sample payment (captured before the dump) | \`$SAMPLE_ID\`: $SAMPLE_BACK after the restore |"
   echo "| Vault | $VAULT_OK/3 nodes initialised and unsealed by the original KMS key, with the original data (policies, Kubernetes auth, database engine); the ledger received fresh Vault-issued credentials |"

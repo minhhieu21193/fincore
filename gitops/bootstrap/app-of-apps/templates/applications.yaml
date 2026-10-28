@@ -9,6 +9,7 @@
 {{- $valueFiles = append $valueFiles (printf "envs/%s/values/%s.yaml" $root.Values.env $name) }}
 {{- $inline := dict }}
 {{- if $c.clusterValues }}{{ $inline = tpl $c.clusterValues $root | fromYaml }}{{ end }}
+{{- if and $root.Values.restoreHold $c.restoreValues }}{{ $inline = mergeOverwrite $inline (tpl $c.restoreValues $root | fromYaml) }}{{ end }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application

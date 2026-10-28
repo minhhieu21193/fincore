@@ -1,5 +1,7 @@
 {{/*
-Upload container: puts /backup/<file> to s3://<bucket>/<prefix>/<UTC timestamp>.<ext>.
+Upload container: puts /backup/<file> to s3://<bucket>/<prefix>/<started>.<ext>, where
+/backup/started is the UTC time the backup began (written by the backup container):
+the key says how old the data is, which is what an RPO measures.
 Arguments: dict "root" $ "file" "vault.snap" "prefix" "vault" "ext" "snap"
 */}}
 {{- define "backups.uploader" -}}
@@ -9,7 +11,7 @@ Arguments: dict "root" $ "file" "vault.snap" "prefix" "vault" "ext" "snap"
   image: {{ $v.images.awsCli }}
   command: ["/bin/sh", "-ec"]
   args:
-    - aws s3 cp --only-show-errors "/backup/{{ .file }}" "s3://{{ $v.bucket }}/{{ .prefix }}/$(date -u +%Y%m%dT%H%M%SZ).{{ .ext }}"
+    - aws s3 cp --only-show-errors "/backup/{{ .file }}" "s3://{{ $v.bucket }}/{{ .prefix }}/$(cat /backup/started).{{ .ext }}"
   env:
     - { name: HOME, value: /tmp }
     - { name: AWS_REGION, value: {{ $v.region | quote }} }
@@ -18,7 +20,7 @@ Arguments: dict "root" $ "file" "vault.snap" "prefix" "vault" "ext" "snap"
   command: ["/bin/sh", "-ec"]
   args:
     - >-
-      key="{{ .prefix }}/$(date -u +%Y%m%dT%H%M%SZ).{{ .ext }}";
+      key="{{ .prefix }}/$(cat /backup/started).{{ .ext }}";
       curl -sSf --aws-sigv4 "aws:amz:{{ $v.region }}:s3" --user "$ACCESS_KEY:$SECRET_KEY"
       -T "/backup/{{ .file }}" "{{ $v.endpoint }}/{{ $v.bucket }}/$key";
       echo "uploaded $key ($(wc -c < /backup/{{ .file }}) bytes)"

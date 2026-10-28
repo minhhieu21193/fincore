@@ -1,5 +1,6 @@
-# Every backup is written under <prefix>/<UTC timestamp>.<ext>, so the newest
-# one is the last key in order. RPO <= schedule interval.
+# Every backup is written under <prefix>/<UTC time the backup started>.<ext>,
+# so the newest one is the last key in order and its name is the age of its
+# data. RPO <= schedule interval.
 schedule: "*/15 * * * *"
 bucket: fincore-backups
 
