@@ -237,12 +237,19 @@ ok "gitserver ready"
 
 # ---------------------------------------------------------------- Argo CD
 log "Argo CD (chart $ARGOCD_CHART_VERSION)"
-helm upgrade --install argocd argo-cd \
-  --repo https://argoproj.github.io/argo-helm --version "$ARGOCD_CHART_VERSION" \
-  --namespace argocd --create-namespace \
-  -f "$ROOT/gitops/bootstrap/argocd/values.yaml" \
-  -f "$ROOT/gitops/bootstrap/argocd/values-kind.yaml" \
-  --wait --timeout 10m >/dev/null
+# Retried: the chart comes from the internet, and a restore must not fail on a
+# network blip (it did once in a DR drill trial).
+for attempt in 1 2 3; do
+  helm upgrade --install argocd argo-cd \
+    --repo https://argoproj.github.io/argo-helm --version "$ARGOCD_CHART_VERSION" \
+    --namespace argocd --create-namespace \
+    -f "$ROOT/gitops/bootstrap/argocd/values.yaml" \
+    -f "$ROOT/gitops/bootstrap/argocd/values-kind.yaml" \
+    --wait --timeout 10m >/dev/null && break
+  (( attempt == 3 )) && die "Argo CD could not be installed"
+  warn "Argo CD install failed (attempt $attempt), retrying in $(( attempt * 20 ))s"
+  sleep $(( attempt * 20 ))
+done
 ok "Argo CD ready"
 
 log "root application (app-of-apps, env=kind)"

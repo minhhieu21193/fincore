@@ -42,10 +42,17 @@ newest_velero() {
   kubectl -n velero get backups.velero.io -l velero.io/schedule-name=velero-cluster-state -o json |
     jq -r '[.items[] | select(.status.phase == "Completed")] | sort_by(.status.completionTimestamp) | last | "\(.metadata.name) \(.status.completionTimestamp)"'
 }
+# The store outlives clusters: only backups taken by this cluster count.
+CLUSTER_T="$(kubectl get namespace kube-system -o jsonpath='{.metadata.creationTimestamp}')"
+CLUSTER_T="$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$CLUSTER_T" +%s 2>/dev/null || date -u -d "$CLUSTER_T" +%s)"
 backup_set_complete() {
-  [[ -n "$(s3_latest vault/)" && -n "$(s3_latest postgres/)" ]] && newest_velero | grep -q 'Z$'
+  local v p b
+  v="$(s3_latest vault/)"; p="$(s3_latest postgres/)"; b="$(newest_velero | awk '{print $2}')"
+  [[ -n "$v" && -n "$p" && "$b" == *Z ]] || return 1
+  (( $(epoch_of_key "$v") > CLUSTER_T && $(epoch_of_key "$p") > CLUSTER_T )) || return 1
+  (( $(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$b" +%s 2>/dev/null || date -u -d "$b" +%s) > CLUSTER_T ))
 }
-wait_for "a complete backup set (Velero, Vault snapshot, PostgreSQL dump; schedule */15)" 1200 backup_set_complete
+wait_for "a complete backup set taken by this cluster (Velero, Vault snapshot, PostgreSQL dump; schedule */15)" 1200 backup_set_complete
 
 # The disaster strikes between two backups, while payments flow.
 sleep "${DISASTER_DELAY:-90}"
