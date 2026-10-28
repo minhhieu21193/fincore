@@ -138,9 +138,9 @@ p.row("Cluster")
 p.stat("Nodes ready", 'sum(kube_node_status_condition{condition="Ready",status="true"})', "short")
 p.stat("Pod restarts (1h)", 'sum(increase(kube_pod_container_status_restarts_total[1h])) or vector(0)', "short", decimals=0,
        thresholds=[{"color": "green", "value": None}, {"color": "orange", "value": 1}])
-p.stat("Vault nodes unsealed", 'sum(vault_core_unsealed) or vector(0)', "short",
+p.stat("Vault active node unsealed", 'sum(vault_core_unsealed) or vector(0)', "short",
        thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 1}],
-       desc="Reported by the active node; 0 means Vault is down or sealed.")
+       desc="1 when the active Vault node is unsealed (only the active node reports it); 0 means Vault is down or sealed. Raft fault tolerance shows how many nodes can be lost.")
 p.stat("Vault Raft fault tolerance", 'max(vault_autopilot_failure_tolerance) or vector(0)', "short",
        thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 1}],
        desc="How many Vault nodes can be lost without losing quorum.")

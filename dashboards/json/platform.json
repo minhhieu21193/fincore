@@ -147,8 +147,8 @@
   },
   {
    "type": "stat",
-   "title": "Vault nodes unsealed",
-   "description": "Reported by the active node; 0 means Vault is down or sealed.",
+   "title": "Vault active node unsealed",
+   "description": "1 when the active Vault node is unsealed (only the active node reports it); 0 means Vault is down or sealed. Raft fault tolerance shows how many nodes can be lost.",
    "datasource": {
     "type": "prometheus",
     "uid": "prometheus"
