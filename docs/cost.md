@@ -7,8 +7,8 @@ What the AWS demo environment costs to run, built from AWS's public price list f
 | | USD |
 |---|---:|
 | **Per hour (idle demo, 24/7)** | **1.43** |
-| **Per day** | **34.33** |
-| **Per 30 days** | **1030** |
+| **Per day** | **34.39** |
+| **Per 30 days** | **1032** |
 | Spot share | 3 of 9 nodes (23 % of node cost); Spot saves $3.43/day against on-demand for the same pool |
 | **Cost per 1,000 payments** | **$0.046** at the demo's 10 payments/s; $0.019 at 30/s ([below](#cost-per-1000-payments)) |
 
@@ -37,11 +37,11 @@ What the AWS demo environment costs to run, built from AWS's public price list f
 | AWS WAF | 1 web ACL + 5 rules (requests below) | $5 + $1/rule | 10.00 |
 | CloudWatch Logs | EKS control plane (5 log types), WAF, CloudTrail: **assumed** 0.5 GB/day, kept 30 days | $0.70/GB + $0.03/GB-month | 10.95 |
 | NAT data processed | **assumed** 2 GB/day (ECR, STS, SQS and Secrets Manager use endpoints) | $0.059/GB | 3.54 |
-| KMS | 3 customer-managed keys (platform, Vault unseal, audit) | $1/key | 3.00 |
+| KMS | 5 customer-managed keys, one per data domain: CDE, platform, backups, Vault unseal, audit | $1/key | 5.00 |
 | Secrets Manager | 3 FinCore secrets + the Aurora master secret | $0.40/secret | 1.60 |
 | Aurora storage | **assumed** 10 GB | $0.11/GB-month | 1.10 |
 | ECR + S3 (state, CloudTrail, backups) | **assumed** 2 GB + 5 GB | $0.10 / $0.025 per GB-month | 0.33 |
-| **Total** | | | **74.87** (2.50/day) |
+| **Total** | | | **76.87** (2.56/day) |
 
 The Route 53 hosted zone already exists (it is looked up, not created), so it is not counted.
 
@@ -51,8 +51,27 @@ The Route 53 hosted zone already exists (it is looked up, not created), so it is
 - **The CDE stays on-demand on purpose.** Spot interruptions in the cardholder-data zone would trigger canary analysis noise and reschedules of Vault-credentialed pods. Moving it to Spot (c7g.large at $0.0389/h) would save about $3.20/day; not worth it for payments.
 - **Interface endpoints** are assumed to be billed per AZ, as PrivateLink endpoints are deployed (one ENI per subnet). The price list entry says only "per VPC endpoint hour". If they were billed once per endpoint, subtract $3.12/day.
 - **Aurora** is costed at its floor (0.5 ACU × 2 instances). Every ACU-hour above that costs $0.20. I/O costs $0.22 per million requests (Aurora Standard; I/O-Optimized would be $0.26/ACU-h and $0.248/GB-month).
+- **KMS** counts one key version per key. Every key rotates every 90 days, and AWS charges $1/month for each of the first two rotations, so after six months the five keys cost up to $15/month instead of $5 (+$0.33/day). Requests ($0.03 per 10,000) stay below a cent a day at demo load because SQS and S3 reuse data keys (5 minutes; S3 Bucket Key).
 - **Not included:** data transfer to the internet (webhooks to merchants are tiny), CloudTrail data events (not enabled), Support plans, taxes.
 - **Biggest levers for a cheaper demo:** run it only when needed (`up.sh`/`down.sh`); one AZ instead of three for a throwaway demo (about −$10/day: 4 fewer nodes, 10 fewer endpoint ENIs, 2 fewer IPs; but no AZ-loss story and no Aurora failover); Gateway endpoints are free, while interface endpoints and NAT are not.
+
+## Small-team profile
+
+[`terraform/envs/demo/profiles/small-team.tfvars`](../terraform/envs/demo/profiles/small-team.tfvars) (`FINCORE_PROFILE=small-team scripts/up.sh`) is the same platform for a team that cannot staff Vault: one NAT gateway, 2 system nodes, and Secrets Manager instead of Vault HA. What it gives up in security is listed in [`compliance-mapping.md`](compliance-mapping.md#small-team-profile).
+
+| | Standard | Small-team | Per day |
+|---|---|---|---:|
+| System node group (m7g.large on-demand, $0.102/h) | 3, one per AZ (Vault HA needs 3) | 2 | −2.45 |
+| NAT gateways | 1 | 1 (one per AZ would add 2 × $0.059/h and 2 public IPs, +$3.07/day) | 0 |
+| EBS gp3 ($0.096/GB-month) | 9 roots × 40 GB + Vault 3 × 10 GB + 72 GB other PVCs | 8 roots × 40 GB + 72 GB | −0.22 |
+| KMS keys ($1/month) | 5 | 4 (no Vault unseal key) | −0.03 |
+| Secrets Manager ($0.40/month) | 4 (`fincore-vault-db-admin`) | 4 (`fincore-ledger-db` instead) | 0 |
+| **Per hour** | **1.43** | **1.32** | |
+| **Per day** | **34.39** | **31.69** | **−2.70** |
+| **Per 30 days** | **1032** | **951** | |
+| **Per 1,000 payments** at 10/s | $0.046 | $0.043 | |
+
+The small-team profile saves 8 %. Its real saving is people, not money: nobody has to operate Vault (unseal and recovery keys, Raft snapshots and restores, upgrades, the audit device). The cost floor stays where it is because it is set by the three zones: each node pool runs one node per AZ, and the interface endpoints are billed per AZ. Dropping to two zones would be the next lever (about −$5/day: one CDE node, one Spot node and 5 endpoint ENIs fewer), but it gives up the zone-loss story, so it is not part of this profile.
 
 ## Cost per 1,000 payments
 

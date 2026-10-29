@@ -4,6 +4,41 @@
 #
 # The system nodes are labelled (fincore.io/node-role=system) but not tainted:
 # platform controllers must be able to start before Karpenter exists.
+#
+# KMS: the platform key encrypts what belongs to the cluster (Secrets, EBS,
+# logs). Workloads that touch cardholder data or backups get the CDE or the
+# backups key, each only through its service and for its own resources
+# (kms:ViaService and kms:EncryptionContext conditions below).
+
+data "aws_region" "current" {}
+
+locals {
+  region = data.aws_region.current.region
+
+  # Karpenter launches nodes whose root volumes use the platform key (general
+  # nodes) or the CDE key (cardholder-data-zone nodes; EC2NodeClass kmsKeyID).
+  # EC2 calls KMS on the controller's behalf, so the controller may use the two
+  # keys only through EC2, and may create grants only for AWS resources.
+  karpenter_ebs_kms_statements = [
+    {
+      sid       = "EbsVolumeGrants"
+      actions   = ["kms:CreateGrant"]
+      resources = [var.platform_kms_key_arn, var.cde_kms_key_arn]
+      condition = [
+        { test = "Bool", variable = "kms:GrantIsForAWSResource", values = ["true"] },
+        { test = "StringEquals", variable = "kms:ViaService", values = ["ec2.${local.region}.amazonaws.com"] },
+      ]
+    },
+    {
+      sid       = "EbsVolumeKeys"
+      actions   = ["kms:GenerateDataKeyWithoutPlaintext", "kms:Decrypt", "kms:ReEncrypt*", "kms:DescribeKey"]
+      resources = [var.platform_kms_key_arn, var.cde_kms_key_arn]
+      condition = [
+        { test = "StringEquals", variable = "kms:ViaService", values = ["ec2.${local.region}.amazonaws.com"] },
+      ]
+    },
+  ]
+}
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
@@ -24,12 +59,12 @@ module "eks" {
 
   enabled_log_types                      = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
   cloudwatch_log_group_retention_in_days = var.log_retention_days
-  cloudwatch_log_group_kms_key_id        = var.kms_key_arn
+  cloudwatch_log_group_kms_key_id        = var.platform_kms_key_arn
 
-  # Envelope encryption of Kubernetes Secrets with our key.
+  # Envelope encryption of Kubernetes Secrets with the platform key.
   create_kms_key = false
   encryption_config = {
-    provider_key_arn = var.kms_key_arn
+    provider_key_arn = var.platform_kms_key_arn
     resources        = ["secrets"]
   }
 
@@ -63,12 +98,13 @@ module "eks" {
       ami_release_version = var.system_ami_release_version
       instance_types      = var.system_instance_types
       capacity_type       = "ON_DEMAND"
-      # Three: Vault (3 replicas, one per node and per AZ, pinned to this
-      # group) needs one node in each AZ, and Karpenter does not scale managed
-      # node groups. Two left the third Vault pod Pending forever.
-      min_size     = 3
-      max_size     = 4
-      desired_size = 3
+      # Three with Vault: its 3 replicas (one per node and per AZ, pinned to
+      # this group) need one node in each AZ, and Karpenter does not scale
+      # managed node groups. Two left the third Vault pod Pending forever.
+      # Without Vault (small-team profile) two are enough.
+      min_size     = var.system_node_count
+      max_size     = var.system_node_count + 1
+      desired_size = var.system_node_count
       labels = {
         "fincore.io/node-role" = "system"
       }
@@ -86,7 +122,7 @@ module "eks" {
             volume_size           = 40
             volume_type           = "gp3"
             encrypted             = true
-            kms_key_id            = var.kms_key_arn
+            kms_key_id            = var.platform_kms_key_arn
             delete_on_termination = true
           }
         }
@@ -115,6 +151,8 @@ module "karpenter" {
 
   # Spot interruption handling: SQS queue fed by EventBridge rules.
   enable_spot_termination = true
+
+  iam_policy_statements = local.karpenter_ebs_kms_statements
 
   node_iam_role_use_name_prefix = false
   node_iam_role_name            = "${var.name}-karpenter-node"
@@ -155,12 +193,13 @@ module "ebs_csi_pod_identity" {
 
   name                      = "${var.name}-ebs-csi"
   attach_aws_ebs_csi_policy = true
-  aws_ebs_csi_kms_arns      = [var.kms_key_arn]
+  aws_ebs_csi_kms_arns      = [var.platform_kms_key_arn]
   tags                      = var.tags
 }
 
 # Vault auto-unseal: the dedicated key only, and only the three calls the seal makes.
 data "aws_iam_policy_document" "vault" {
+  count = var.vault_enabled ? 1 : 0
   statement {
     sid       = "AutoUnseal"
     actions   = ["kms:Encrypt", "kms:Decrypt", "kms:DescribeKey"]
@@ -172,9 +211,10 @@ module "vault_pod_identity" {
   source  = "terraform-aws-modules/eks-pod-identity/aws"
   version = "2.10.0"
 
+  create                  = var.vault_enabled
   name                    = "${var.name}-vault"
   attach_custom_policy    = true
-  source_policy_documents = [data.aws_iam_policy_document.vault.json]
+  source_policy_documents = [for d in data.aws_iam_policy_document.vault : d.json]
   associations = {
     this = {
       cluster_name    = module.eks.cluster_name
@@ -187,7 +227,7 @@ module "vault_pod_identity" {
 
 # Backups: Velero (cluster state) and the Vault snapshot job write to the
 # backup bucket, each through its own role; they can list, read and write
-# objects there, and nothing else.
+# objects there, and use the backups key only through S3 for that bucket.
 data "aws_iam_policy_document" "backups" {
   statement {
     sid       = "ListBucket"
@@ -201,8 +241,19 @@ data "aws_iam_policy_document" "backups" {
   }
   statement {
     sid       = "Encryption"
-    actions   = ["kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
-    resources = [var.kms_key_arn]
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
+    resources = [var.backups_kms_key_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["s3.${local.region}.amazonaws.com"]
+    }
+    # The bucket uses an S3 Bucket Key: the context is the bucket's ARN.
+    condition {
+      test     = "StringLike"
+      variable = "kms:EncryptionContext:aws:s3:arn"
+      values   = [var.backup_bucket_arn, "${var.backup_bucket_arn}/*"]
+    }
   }
 }
 
@@ -227,6 +278,7 @@ module "vault_snapshot_pod_identity" {
   source  = "terraform-aws-modules/eks-pod-identity/aws"
   version = "2.10.0"
 
+  create                  = var.vault_enabled
   name                    = "${var.name}-vault-snapshot"
   attach_custom_policy    = true
   source_policy_documents = [data.aws_iam_policy_document.backups.json]
@@ -327,15 +379,58 @@ module "cert_manager_pod_identity" {
   tags = var.tags
 }
 
+# External Secrets reads the FinCore secrets, and may open each key only
+# through Secrets Manager and only for the secrets of that key's domain
+# (Secrets Manager puts the secret's ARN in the encryption context). The
+# module's own External Secrets policy is not used: its kms:Decrypt has no
+# conditions, and with no key listed it falls back to every key.
+data "aws_iam_policy_document" "external_secrets" {
+  statement {
+    sid       = "ReadSecrets"
+    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:ListSecretVersionIds"]
+    resources = concat(var.platform_secret_arns, var.cde_secret_arns)
+  }
+
+  statement {
+    sid       = "DecryptPlatformSecrets"
+    actions   = ["kms:Decrypt"]
+    resources = [var.platform_kms_key_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["secretsmanager.${local.region}.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:SecretARN"
+      values   = var.platform_secret_arns
+    }
+  }
+
+  statement {
+    sid       = "DecryptCdeSecrets"
+    actions   = ["kms:Decrypt"]
+    resources = [var.cde_kms_key_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["secretsmanager.${local.region}.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:SecretARN"
+      values   = var.cde_secret_arns
+    }
+  }
+}
+
 module "external_secrets_pod_identity" {
   source  = "terraform-aws-modules/eks-pod-identity/aws"
   version = "2.10.0"
 
-  name                                  = "${var.name}-external-secrets"
-  attach_external_secrets_policy        = true
-  external_secrets_secrets_manager_arns = var.secrets_manager_arns
-  external_secrets_kms_key_arns         = [var.kms_key_arn]
-  external_secrets_create_permission    = false
+  name                    = "${var.name}-external-secrets"
+  attach_custom_policy    = true
+  source_policy_documents = [data.aws_iam_policy_document.external_secrets.json]
   associations = {
     this = {
       cluster_name    = module.eks.cluster_name
@@ -352,10 +447,22 @@ data "aws_iam_policy_document" "payments_api" {
     actions   = ["sqs:SendMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl"]
     resources = [var.payment_events_queue_arn]
   }
+  # The CDE key, only through SQS and only for this queue's messages. SQS
+  # also calls Decrypt to verify a new data key, hence both actions.
   statement {
     sid       = "EncryptMessages"
     actions   = ["kms:GenerateDataKey", "kms:Decrypt"]
-    resources = [var.kms_key_arn]
+    resources = [var.cde_kms_key_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["sqs.${local.region}.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:aws:sqs:arn"
+      values   = [var.payment_events_queue_arn]
+    }
   }
 }
 
@@ -388,10 +495,23 @@ data "aws_iam_policy_document" "notifier" {
     ]
     resources = [var.payment_events_queue_arn]
   }
+  # The CDE key, decrypt only, only through SQS and only for this queue. SQS
+  # itself moves failed messages to the dead-letter queue; reading that queue
+  # is an operator's job, not the notifier's.
   statement {
     sid       = "DecryptMessages"
     actions   = ["kms:Decrypt"]
-    resources = [var.kms_key_arn]
+    resources = [var.cde_kms_key_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["sqs.${local.region}.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:aws:sqs:arn"
+      values   = [var.payment_events_queue_arn]
+    }
   }
 }
 

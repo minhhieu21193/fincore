@@ -42,3 +42,12 @@ output "fis_az_loss_template_id" {
   description = "FIS experiment template: lose the first availability zone (scripts/chaos-aws.sh)."
   value       = module.chaos.az_loss_template_id
 }
+
+output "kms_key_arns" {
+  description = "Customer-managed keys by data domain (docs/aws-demo-day.md compares volumes and resources against them)."
+  value = {
+    cde      = module.cde_kms.key_arn
+    platform = module.platform_kms.key_arn
+    backups  = module.backups_kms.key_arn
+  }
+}

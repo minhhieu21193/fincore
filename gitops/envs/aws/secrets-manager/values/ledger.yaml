@@ -1,0 +1,8 @@
+# No Vault Agent: the ledger's owner role logs in with its password from
+# Secrets Manager (Secret ledger-db, created by cde-base).
+vault:
+  enabled: false
+env:
+  DB_USER: ledger
+secretEnv:
+  DB_PASSWORD: { secret: ledger-db, key: password }

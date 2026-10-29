@@ -7,6 +7,7 @@
 {{- range $c.valueFiles }}{{ $valueFiles = append $valueFiles . }}{{ end }}
 {{- /* Value files are relative to gitops/; the env-specific file is optional. */}}
 {{- $valueFiles = append $valueFiles (printf "envs/%s/values/%s.yaml" $root.Values.env $name) }}
+{{- if $root.Values.overlay }}{{ $valueFiles = append $valueFiles (printf "envs/%s/%s/values/%s.yaml" $root.Values.env $root.Values.overlay $name) }}{{ end }}
 {{- $inline := dict }}
 {{- if $c.clusterValues }}{{ $inline = tpl $c.clusterValues $root | fromYaml }}{{ end }}
 {{- if and $root.Values.restoreHold $c.restoreValues }}{{ $inline = mergeOverwrite $inline (tpl $c.restoreValues $root | fromYaml) }}{{ end }}

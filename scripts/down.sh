@@ -2,7 +2,7 @@
 # Destroy the AWS demo environment, in an order that leaves nothing billable.
 # Never run in this project; kept as the reviewed, ordered procedure.
 #
-#   FINCORE_AWS=confirm scripts/down.sh
+#   FINCORE_AWS=confirm scripts/down.sh      # FINCORE_PROFILE as for up.sh
 #
 # Terraform does not know about what controllers create at runtime, so
 # those go first, while the controllers are still running to clean up:
@@ -14,6 +14,8 @@
 #   5. terraform destroy (EKS, Aurora, VPC, ...); the state bucket is kept.
 #   6. Leftover check: anything still tagged for the project, any load
 #      balancer, instance, volume, address or NAT gateway in the region.
+# The EC2 Auto Scaling and Spot service-linked roles that up.sh may have
+# created stay: they are account-wide, free, and other workloads use them.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -51,7 +53,8 @@ if kubectl get nodes >/dev/null 2>&1; then
 fi
 
 log "5/6 terraform destroy (about 20 minutes)"
-terraform -chdir="$ENV_DIR" destroy -input=false -auto-approve
+tf_profile_args
+terraform -chdir="$ENV_DIR" destroy -input=false -auto-approve ${TF_PROFILE_ARGS[@]+"${TF_PROFILE_ARGS[@]}"}
 
 log "6/6 leftover check in $REGION"
 left=0

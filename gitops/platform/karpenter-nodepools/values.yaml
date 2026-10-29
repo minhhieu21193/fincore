@@ -1,6 +1,9 @@
 # clusterName and nodeRole are injected at bootstrap from Terraform outputs.
 clusterName: ""
 nodeRole: ""
+# -- KMS key for the root volumes of general nodes (AWS: the platform key);
+# empty uses the account's default EBS key.
+ebsKmsKeyId: ""
 # -- Pinned EKS-optimised AL2023 AMI release (github.com/awslabs/amazon-eks-ami/releases).
 amiAlias: al2023@v20261019
 spot:
@@ -22,3 +25,6 @@ cde:
   # -- Tags of the CDE node security group created by Terraform (modules/eks).
   securityGroupTags:
     fincore.io/security-group: cde
+  # -- KMS key for the CDE nodes' root volumes (AWS: the CDE key): their disks
+  # hold the zone's container logs and emptyDir data.
+  ebsKmsKeyId: ""

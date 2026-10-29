@@ -45,6 +45,16 @@ terraform_validate() {
   done
 }
 
+# Offline module tests (mocked providers, no AWS calls): which KMS key each
+# workload may use, and the key policies of each data domain.
+terraform_tests() {
+  local d
+  for d in terraform/modules/*/; do
+    [[ -d "$d/tests" ]] || continue
+    (cd "$d" && terraform init -backend=false -input=false >/dev/null && terraform test -no-color) || return 1
+  done
+}
+
 tflint_all() {
   local d
   tflint --init --config "$ROOT/terraform/.tflint.hcl" >/dev/null
@@ -71,7 +81,8 @@ helm_lint() {
   "${lint[@]}" policies --set signature.mode=keyless &&
   "${lint[@]}" gitops/apps/fincore-base -f gitops/apps/cde-base/values.yaml &&
   "${lint[@]}" gitops/bootstrap/app-of-apps -f gitops/envs/kind/app-of-apps.yaml &&
-  "${lint[@]}" gitops/bootstrap/app-of-apps -f gitops/envs/aws/app-of-apps.yaml -f gitops/ci/aws-cluster.example.yaml
+  "${lint[@]}" gitops/bootstrap/app-of-apps -f gitops/envs/aws/app-of-apps.yaml -f gitops/ci/aws-cluster.example.yaml &&
+  "${lint[@]}" gitops/bootstrap/app-of-apps -f gitops/envs/aws/app-of-apps.yaml -f gitops/ci/aws-cluster.example.yaml -f gitops/envs/aws/secrets-manager/app-of-apps.yaml
 }
 
 kubeconform_envs() {
@@ -80,13 +91,32 @@ kubeconform_envs() {
   for env in kind aws; do
     scripts/render.sh "$env" "$out/$env" >/dev/null || return 1
   done
-  scripts/ci/crd-schemas.sh "$out/kind" "$out/aws" "$out/schemas" || return 1
+  # AWS without Vault (small-team profile, Terraform secrets_backend = "secrets-manager").
+  scripts/render.sh aws "$out/aws-secrets-manager" secrets-manager >/dev/null || return 1
+  scripts/ci/crd-schemas.sh "$out/kind" "$out/aws" "$out/aws-secrets-manager" "$out/schemas" || return 1
   # Security invariant: the Vault injector fails closed in every environment.
   for env in kind aws; do
     [[ "$(yq 'select(.kind == "MutatingWebhookConfiguration" and .metadata.name == "vault-agent-injector-cfg") | .webhooks[].failurePolicy' "$out/$env/vault.yaml")" == Fail ]] ||
       { echo "vault injector webhook must have failurePolicy Fail ($env)"; return 1; }
   done
-  for env in kind aws; do
+  # Without Vault nothing may still expect it: no Vault apps, no agent on the ledger.
+  local sm="$out/aws-secrets-manager"
+  if [[ -e "$sm/vault.yaml" || -e "$sm/vault-config.yaml" ]] || grep -q 'vault.hashicorp.com/agent-inject' "$sm"/*.yaml; then
+    echo "aws (secrets-manager) still renders Vault or a Vault Agent"; return 1
+  fi
+  [[ "$(yq 'select(.kind == "Rollout") | .spec.template.spec.containers[0].env[] | select(.name == "DB_PASSWORD") | .valueFrom.secretKeyRef.name' "$sm/ledger.yaml")" == ledger-db ]] ||
+    { echo "aws (secrets-manager): the ledger must read DB_PASSWORD from Secret ledger-db"; return 1; }
+  # AWS: no backup may contain the cardholder-data zone's Secrets, and the
+  # zone's nodes encrypt their disks with the CDE key (general nodes: platform key).
+  local schedules
+  schedules="$(yq -o=json -I=0 'select(.kind == "Schedule") | .spec.template' "$out/aws/velero.yaml")"
+  if jq -e -s 'any(.[]; (.includedNamespaces // [] | index("fincore-cde")) and (.excludedResources // [] | index("secrets") | not))' <<<"$schedules" >/dev/null; then
+    echo "aws: a Velero schedule backs up fincore-cde Secrets"; return 1
+  fi
+  [[ "$(yq 'select(.kind == "EC2NodeClass" and .metadata.name == "cde") | .spec.blockDeviceMappings[0].ebs.kmsKeyID' "$out/aws/karpenter-nodepools.yaml")" == "$(yq '.cluster.cdeKmsKeyArn' gitops/ci/aws-cluster.example.yaml)" &&
+     "$(yq 'select(.kind == "EC2NodeClass" and .metadata.name != "cde") | .spec.blockDeviceMappings[0].ebs.kmsKeyID' "$out/aws/karpenter-nodepools.yaml")" == "$(yq '.cluster.platformKmsKeyArn' gitops/ci/aws-cluster.example.yaml)" ]] ||
+    { echo "aws: EC2NodeClass root volumes must use the CDE key (cde) and the platform key (general)"; return 1; }
+  for env in kind aws aws-secrets-manager; do
     kubeconform -strict -summary -kubernetes-version "$K8S_VERSION" \
       -schema-location default \
       -schema-location "$out/schemas/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
@@ -119,6 +149,7 @@ static_checks() {
   need terraform tflint checkov helm yq jq kubeconform kyverno actionlint shellcheck python3 promtool
   run "terraform fmt" terraform fmt -check -recursive terraform
   run "terraform validate" terraform_validate
+  run "terraform test (modules, mocked providers)" terraform_tests
   run "tflint" tflint_all
   run "checkov" checkov --config-file .checkov.yaml --quiet --compact
   run "helm lint" helm_lint

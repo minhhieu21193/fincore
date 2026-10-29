@@ -43,6 +43,7 @@ vaultClientCA:
 networkPolicies:
   enabled: true
   monitoringNamespace: monitoring
+  # -- Namespace of Vault; empty when the environment runs without Vault.
   vaultNamespace: vault
   appNamespace: fincore
   # Peers outside the zone. kind: pods in fincore-data. AWS: CIDRs (cidrs set),
