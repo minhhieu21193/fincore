@@ -38,6 +38,12 @@ date: question → choice (why).
   - External Secrets no longer gets the pod-identity module's External Secrets policy. Its `kms:Decrypt` has no conditions, and with no key listed it falls back to `key/*`. In its place: a policy with Secrets Manager reads, and Decrypt per key bound to `kms:ViaService` = secretsmanager and the domain's `SecretARN`s. `ListSecrets` and `BatchGetSecretValue` were dropped (no `find`/`dataFrom` in use).
   - No DR runbook existed (only architecture.md and the kind drill script), so `docs/runbooks/disaster-recovery.md` was written. `docs/aws-demo-day.md` lists what only AWS can prove; it was written, not run.
   - In demo-day item d, Decrypt can only be shown with an invalid blob (no CDE ciphertext exists outside the services), so the checklist asks to record which error AWS returns.
+- 2026-10-29: PR #4, two launch blockers found in review (owner):
+  - **Spot nodes:** EC2 refuses Spot instances whose EBS key `AWSServiceRoleForEC2Spot` cannot use, and the general NodePools try Spot first with the platform key. Fix: the platform key allows that role (data actions and DescribeKey; CreateGrant only for AWS resources), the same shape as Auto Scaling. The CDE NodePool is on-demand only, so the CDE key gets nothing for Spot (commented, and tested).
+  - **First apply on an empty account:** KMS rejects a key policy naming a role that does not exist yet, and neither service-linked role exists before AWS first needs it. Fix: `scripts/up.sh` creates both before `terraform apply`. It checks with `get-role`, creates otherwise, and tolerates "has been taken"; it was tested against a stubbed CLI, with no AWS calls.
+  - Not a Terraform `aws_iam_service_linked_role`: it fails when the role already exists (the usual case in a used account), and `terraform destroy` would delete account-wide roles that other workloads use.
+  - Not a key policy without the roles: EBS needs them in it.
+  - Direct `terraform apply` on a new account still needs the two roles first (`aws-demo-day.md`, pre-flight).
 
 ## Waiting for owner
 

@@ -5,7 +5,12 @@
 #     through these AWS services (e.g. SQS, RDS), so an IAM policy with kms:*
 #     still cannot decrypt the domain's data outside them;
 #   - autoscaling_service_role: EC2 Auto Scaling may launch instances whose EBS
-#     volumes use this key (managed node groups).
+#     volumes use this key (managed node groups);
+#   - spot_service_role: the same for Spot instances (Karpenter's Spot nodes).
+#     EC2 refuses to launch a Spot instance with a customer-managed EBS key that
+#     AWSServiceRoleForEC2Spot cannot use.
+# A key policy may only name roles that exist: scripts/up.sh creates both
+# service-linked roles before the first apply on a new account.
 
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
@@ -22,6 +27,7 @@ locals {
     "kms:GenerateDataKey*",
   ]
   autoscaling_role = "arn:${local.partition}:iam::${local.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+  spot_role        = "arn:${local.partition}:iam::${local.account_id}:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot"
 }
 
 data "aws_iam_policy_document" "this" {
@@ -81,6 +87,37 @@ data "aws_iam_policy_document" "this" {
       principals {
         type        = "AWS"
         identifiers = [local.autoscaling_role]
+      }
+      condition {
+        test     = "Bool"
+        variable = "kms:GrantIsForAWSResource"
+        values   = ["true"]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.spot_service_role ? [1] : []
+    content {
+      sid       = "SpotUse"
+      actions   = concat(local.data_actions, ["kms:DescribeKey"])
+      resources = ["*"]
+      principals {
+        type        = "AWS"
+        identifiers = [local.spot_role]
+      }
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.spot_service_role ? [1] : []
+    content {
+      sid       = "SpotGrants"
+      actions   = ["kms:CreateGrant"]
+      resources = ["*"]
+      principals {
+        type        = "AWS"
+        identifiers = [local.spot_role]
       }
       condition {
         test     = "Bool"

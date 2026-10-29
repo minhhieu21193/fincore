@@ -37,3 +37,9 @@ variable "autoscaling_service_role" {
   type        = bool
   default     = false
 }
+
+variable "spot_service_role" {
+  description = "Let the EC2 Spot service-linked role use the key (EBS volumes of Spot instances)."
+  type        = bool
+  default     = false
+}

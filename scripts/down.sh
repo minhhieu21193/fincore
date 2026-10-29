@@ -14,6 +14,8 @@
 #   5. terraform destroy (EKS, Aurora, VPC, ...); the state bucket is kept.
 #   6. Leftover check: anything still tagged for the project, any load
 #      balancer, instance, volume, address or NAT gateway in the region.
+# The EC2 Auto Scaling and Spot service-linked roles that up.sh may have
+# created stay: they are account-wide, free, and other workloads use them.
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"

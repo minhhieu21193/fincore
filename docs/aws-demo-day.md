@@ -4,6 +4,12 @@ Everything in this repository has passed static checks, and the platform has run
 
 **Before you start**
 - The owner runs everything: it spends money (`docs/cost.md`, about $34/day) and touches a real account.
+- **Pre-flight: both service-linked roles exist.** The platform key's policy names them, and KMS rejects a policy whose principal does not exist yet. `scripts/up.sh` creates them if they are missing; check them before the first apply, and run Terraform by hand only after this check:
+  ```
+  aws iam get-role --role-name AWSServiceRoleForAutoScaling --query Role.Arn
+  aws iam get-role --role-name AWSServiceRoleForEC2Spot --query Role.Arn
+  ```
+  Expected: two ARNs. If one returns `NoSuchEntity`: `aws iam create-service-linked-role --aws-service-name autoscaling.amazonaws.com` (or `spot.amazonaws.com`). Otherwise `terraform apply` fails on the platform key with `MalformedPolicyDocumentException: Policy contains a statement with one or more invalid principals`.
 - Bring the environment up: `FINCORE_AWS=confirm scripts/up.sh`. Add `FINCORE_PROFILE=small-team` for that profile, and use the same value for `down.sh`.
 - Set up the shell:
   ```
@@ -133,24 +139,31 @@ aws kms decrypt --key-id "$CDE_KEY" --ciphertext-blob fileb:///tmp/blob
 - Check the key policy: `aws kms get-key-policy --key-id "$CDE_KEY" --policy-name default`.
 - The `OnlyThroughServices` statement must be present, with `aws:PrincipalIsAWSService` = `false` and `kms:ViaService` listing only the four services.
 
-## e) A CDE node's root volume uses the CDE key
+## e) Node root volumes: CDE on the CDE key, general (Spot) on the platform key
 
 ```
-for role in cde general; do
-  sel=$([ $role = cde ] && echo 'fincore.io/node-role=cde' || echo 'karpenter.sh/nodepool,fincore.io/node-role!=cde')
+for role in cde spot; do
+  sel=$([ $role = cde ] && echo 'fincore.io/node-role=cde' || echo 'karpenter.sh/capacity-type=spot')
   id=$(kubectl get nodes -l "$sel" -o jsonpath='{.items[0].spec.providerID}' | awk -F/ '{print $NF}')
+  aws ec2 describe-instances --instance-ids "$id" --query "Reservations[].Instances[].{role:'$role',lifecycle:InstanceLifecycle,type:InstanceType}"
   aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$id" \
     --query "Volumes[].{role:'$role',vol:VolumeId,enc:Encrypted,key:KmsKeyId}"
 done
 ```
+If no Spot node exists yet, scale something general (not CDE) up until Karpenter launches one. Spot is the general NodePools' first choice.
 
 **Expected:**
-- The CDE node's root volume is encrypted with `$CDE_KEY`.
-- A general (Karpenter) node's volume, and a system node's, use `$PLATFORM_KEY`.
+- The CDE node is on-demand (`lifecycle` empty), and its root volume is encrypted with `$CDE_KEY`.
+- A general node is `lifecycle: spot`, and its root volume is encrypted with `$PLATFORM_KEY`. A system node's volume also uses `$PLATFORM_KEY`.
 
-**Screenshot:** the `describe-volumes` output for both nodes, next to `kubectl get nodes -L fincore.io/node-role,karpenter.sh/nodepool`.
+**Screenshot:** the `describe-instances` and `describe-volumes` output for both nodes, next to `kubectl get nodes -L fincore.io/node-role,karpenter.sh/nodepool,karpenter.sh/capacity-type`.
 
 **If it fails:** a NodeClaim stays un-launched, and Karpenter logs a `CreateFleet` error naming KMS (`Client.InvalidKMSKey.InvalidState`, or `AccessDenied`). Look up the denied call in CloudTrail (`CreateGrant` or `GenerateDataKeyWithoutPlaintext` on the key).
+- **A Spot node is refused, with "EBS volume cannot be encrypted … grant AWSServiceRoleForEC2Spot access":** the platform key's `SpotUse`/`SpotGrants` statements are missing, or the role did not exist when the key policy was written. Check both:
+  - `aws kms get-key-policy --key-id "$PLATFORM_KEY" --policy-name default | jq -r .Policy | jq '.Statement[] | select(.Sid | startswith("Spot"))'`
+  - the pre-flight above.
+
+  Then re-apply. On-demand general nodes would still launch meanwhile (the NodePools' fallback), so a missing Spot node is a symptom too.
 - **Principal is the Karpenter controller role:** compare its `kms:ViaService` with `local.karpenter_ebs_kms_statements` in `terraform/modules/eks/main.tf`.
 - **Principal is `AWSServiceRoleForEC2Fleet`:** EC2 Fleet uses its own service-linked role for encrypted volumes. Let it use both keys the way `AutoScalingUse`/`AutoScalingGrants` do (`terraform/modules/kms/main.tf`, a variable next to `autoscaling_service_role`), and extend the kms test.
 

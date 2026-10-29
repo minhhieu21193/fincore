@@ -72,6 +72,12 @@ run "cde_key_only_through_its_services" {
     condition     = !anytrue([for s in data.aws_iam_policy_document.this.statement : startswith(coalesce(s.sid, "-"), "AutoScaling")])
     error_message = "EC2 Auto Scaling has no business with the CDE key."
   }
+  assert {
+    condition = !anytrue([for s in data.aws_iam_policy_document.this.statement : anytrue([
+      for p in s.principals : anytrue([for i in p.identifiers : strcontains(i, "AWSServiceRoleForEC2Spot")])
+    ])])
+    error_message = "The CDE NodePool is on-demand only: the Spot service-linked role gets nothing on the CDE key."
+  }
 }
 
 run "platform_key_launches_node_group_volumes" {
@@ -79,6 +85,7 @@ run "platform_key_launches_node_group_volumes" {
 
   variables {
     autoscaling_service_role = true
+    spot_service_role        = true
     log_group_arn_patterns   = ["arn:aws:logs:ap-southeast-1:000000000000:log-group:*"]
   }
 
@@ -89,6 +96,27 @@ run "platform_key_launches_node_group_volumes" {
       anytrue([for c in s.condition : c.variable == "kms:GrantIsForAWSResource" && toset(c.values) == toset(["true"])])
     ])
     error_message = "The Auto Scaling service-linked role may create grants for AWS resources only."
+  }
+  # Karpenter's general nodes try Spot first: EC2 launches Spot instances with
+  # its Spot service-linked role, which must be able to use the volume key.
+  assert {
+    condition = anytrue([
+      for s in data.aws_iam_policy_document.this.statement :
+      s.sid == "SpotUse" &&
+      anytrue([for p in s.principals : contains(p.identifiers, "arn:aws:iam::000000000000:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot")]) &&
+      toset(s.actions) == toset(["kms:Encrypt", "kms:Decrypt", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:DescribeKey"]) &&
+      length(s.condition) == 0
+    ])
+    error_message = "The Spot service-linked role may use the platform key (data actions and DescribeKey)."
+  }
+  assert {
+    condition = anytrue([
+      for s in data.aws_iam_policy_document.this.statement :
+      s.sid == "SpotGrants" && toset(s.actions) == toset(["kms:CreateGrant"]) &&
+      anytrue([for p in s.principals : contains(p.identifiers, "arn:aws:iam::000000000000:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot")]) &&
+      anytrue([for c in s.condition : c.variable == "kms:GrantIsForAWSResource" && toset(c.values) == toset(["true"])])
+    ])
+    error_message = "The Spot service-linked role may create grants for AWS resources only."
   }
   assert {
     condition     = !anytrue([for s in data.aws_iam_policy_document.this.statement : s.effect == "Deny"])

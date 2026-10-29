@@ -32,7 +32,8 @@ module "cde_kms" {
   alias       = "${local.name}-cde"
   description = "FinCore ${var.environment}: cardholder-data zone (SQS, Aurora, its secrets, its nodes' volumes)"
   # Usable for data only through the services that hold CDE data (ec2: the
-  # CDE nodes' root volumes, launched by Karpenter).
+  # CDE nodes' root volumes, launched by Karpenter). The CDE NodePool is
+  # on-demand only, so EC2's Spot service-linked role gets no access here.
   via_services            = ["sqs", "rds", "secretsmanager", "ec2"]
   log_group_arn_patterns  = ["arn:${local.partition}:logs:${var.region}:${var.aws_account_id}:log-group:/aws/rds/cluster/${local.name}/*"]
   deletion_window_in_days = 30
@@ -44,7 +45,8 @@ module "platform_kms" {
   alias                    = "${local.name}-platform"
   description              = "FinCore ${var.environment}: EKS Secrets, EBS, ECR, platform logs"
   log_group_arn_patterns   = ["arn:${local.partition}:logs:${var.region}:${var.aws_account_id}:log-group:*"]
-  autoscaling_service_role = true
+  autoscaling_service_role = true # system node group
+  spot_service_role        = true # Karpenter's general NodePools try Spot first
   tags                     = local.tags
 }
 

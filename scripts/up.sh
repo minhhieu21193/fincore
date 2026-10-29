@@ -5,7 +5,8 @@
 #   FINCORE_AWS=confirm scripts/up.sh
 #   FINCORE_AWS=confirm FINCORE_PROFILE=small-team scripts/up.sh   # profiles/small-team.tfvars
 #
-# Order: state bucket (terraform/bootstrap, once) -> the demo environment
+# Order: state bucket (terraform/bootstrap, once) -> the service-linked roles
+# the platform KMS key policy names -> the demo environment
 # (VPC, EKS, Aurora, ...; Argo CD and the root app are installed by Terraform)
 # -> kubeconfig -> wait until every Argo CD application is Synced and Healthy
 # -> initialise Vault once. Prerequisites: AWS credentials for the target
@@ -23,6 +24,27 @@ log "AWS account $(aws sts get-caller-identity --query Account --output text), r
 log "1/4 Terraform state bucket (terraform/bootstrap)"
 terraform -chdir="$ROOT/terraform/bootstrap" init -input=false >/dev/null
 terraform -chdir="$ROOT/terraform/bootstrap" apply -input=false -auto-approve
+
+# The platform key's policy names the EC2 Auto Scaling and EC2 Spot
+# service-linked roles (system node volumes, Karpenter's Spot nodes), and KMS
+# rejects a policy naming a role that does not exist ("invalid principals").
+# On a new account neither exists until AWS first needs it, which is after
+# the key is created. Create them first; they are account-wide, free, and
+# never deleted by down.sh.
+ensure_service_linked_role() { # role-name service
+  aws iam get-role --role-name "$1" >/dev/null 2>&1 && { ok "$1 exists"; return 0; }
+  local err
+  if err="$(aws iam create-service-linked-role --aws-service-name "$2" 2>&1 >/dev/null)"; then
+    ok "$1 created"
+  elif grep -q "has been taken" <<<"$err"; then
+    ok "$1 exists (created concurrently)"
+  else
+    die "could not create $1: $err"
+  fi
+}
+log "service-linked roles for the platform key"
+ensure_service_linked_role AWSServiceRoleForAutoScaling autoscaling.amazonaws.com
+ensure_service_linked_role AWSServiceRoleForEC2Spot spot.amazonaws.com
 
 log "2/4 demo environment (about 25 minutes: EKS and Aurora dominate)"
 terraform -chdir="$ENV_DIR" init -input=false -backend-config=backend.hcl >/dev/null
