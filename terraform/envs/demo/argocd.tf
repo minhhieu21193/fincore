@@ -42,7 +42,12 @@ resource "helm_release" "root_app" {
           targetRevision = var.gitops_revision
           path           = "gitops/bootstrap/app-of-apps"
           helm = {
-            valueFiles = ["../../envs/aws/app-of-apps.yaml"]
+            # secrets_backend = "secrets-manager" adds an overlay without Vault
+            # (gitops/envs/aws/secrets-manager/).
+            valueFiles = concat(
+              ["../../envs/aws/app-of-apps.yaml"],
+              local.vault ? [] : ["../../envs/aws/secrets-manager/app-of-apps.yaml"],
+            )
             valuesObject = {
               repoURL        = "https://github.com/${var.github_repository}.git"
               targetRevision = var.gitops_revision
@@ -62,8 +67,8 @@ resource "helm_release" "root_app" {
                 vpcCidr                    = module.network.vpc_cidr_block
                 publicSubnetCidrs          = module.network.public_subnet_cidrs
                 databaseSubnetCidrs        = module.network.database_subnet_cidrs
-                vaultKmsKeyId              = module.vault_kms.key_arn
-                kmsKeyArn                  = module.kms.key_arn
+                vaultKmsKeyId              = local.vault ? module.vault_kms[0].key_arn : ""
+                kmsKeyArn                  = module.platform_kms.key_arn
                 wafAclArn                  = module.waf.web_acl_arn
                 backupBucket               = module.backups.bucket_name
               }

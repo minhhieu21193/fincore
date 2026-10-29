@@ -5,6 +5,7 @@
 #
 #   scripts/render.sh kind out/kind
 #   scripts/render.sh aws  out/aws     # uses gitops/ci/aws-cluster.example.yaml (fake values)
+#   scripts/render.sh aws  out/aws-sm secrets-manager   # with an overlay (gitops/envs/<env>/<overlay>/)
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -12,12 +13,14 @@ need helm yq
 
 ENV="${1:?usage: render.sh <kind|aws> <outdir>}"
 OUT="${2:?usage: render.sh <kind|aws> <outdir>}"
+OVERLAY="${3:-}"
 K8S_VERSION="${K8S_VERSION:-1.36.0}"
 mkdir -p "$OUT"
 rm -f "$OUT"/*.yaml
 
 extra=()
 [[ "$ENV" == aws ]] && extra=(-f "$ROOT/gitops/ci/aws-cluster.example.yaml")
+[[ -n "$OVERLAY" ]] && extra+=(-f "$ROOT/gitops/envs/$ENV/$OVERLAY/app-of-apps.yaml")
 helm template root "$ROOT/gitops/bootstrap/app-of-apps" -n argocd \
   -f "$ROOT/gitops/envs/$ENV/app-of-apps.yaml" ${extra[@]+"${extra[@]}"} > "$OUT/00-app-of-apps.yaml"
 
@@ -83,4 +86,4 @@ for app in $(yq -N -r 'select(.kind == "Application") | .metadata.name' "$OUT/00
       ${args[@]+"${args[@]}"} -f "$tmp/inline.yaml" > "$OUT/$app.yaml"
   fi
 done
-ok "rendered $(find "$OUT" -name '*.yaml' | wc -l | tr -d ' ') files for env=$ENV into $OUT"
+ok "rendered $(find "$OUT" -name '*.yaml' | wc -l | tr -d ' ') files for env=$ENV${OVERLAY:+ ($OVERLAY)} into $OUT"

@@ -24,3 +24,6 @@ backend.hcl
 !backend.hcl.example
 .terraform.tfstate.lock.info
 policies/tests/policies.yaml
+
+# Provider locks of module test runs (terraform test in terraform/modules/*)
+terraform/modules/*/.terraform.lock.hcl

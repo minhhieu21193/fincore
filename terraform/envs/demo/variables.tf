@@ -67,9 +67,40 @@ variable "vpc_cidr" {
 }
 
 variable "single_nat_gateway" {
-  description = "One NAT gateway for all AZs (demo cost saving)."
+  description = "One NAT gateway for all AZs (demo cost saving; one per AZ survives the loss of a zone's NAT)."
   type        = bool
   default     = true
+}
+
+variable "secrets_backend" {
+  description = <<-EOT
+    How the ledger gets its database credentials:
+      vault            Vault HA (3 nodes, KMS auto-unseal) issues a short-lived user per pod
+      secrets-manager  no Vault; a static password in Secrets Manager, like payments-api
+                       (the small-team profile, profiles/small-team.tfvars)
+  EOT
+  type        = string
+  default     = "vault"
+
+  validation {
+    condition     = contains(["vault", "secrets-manager"], var.secrets_backend)
+    error_message = "secrets_backend must be vault or secrets-manager."
+  }
+}
+
+variable "system_node_count" {
+  description = "Nodes in the system node group, spread over the AZs. Vault HA needs 3 (one replica per node and AZ)."
+  type        = number
+  default     = 3
+
+  validation {
+    condition     = var.system_node_count >= 2
+    error_message = "At least 2 system nodes (Argo CD, Karpenter and CoreDNS must survive a node loss)."
+  }
+  validation {
+    condition     = var.secrets_backend != "vault" || var.system_node_count >= 3
+    error_message = "Vault HA runs one replica per system node: secrets_backend = vault needs system_node_count >= 3."
+  }
 }
 
 variable "kubernetes_version" {

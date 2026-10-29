@@ -2,7 +2,7 @@
 # Destroy the AWS demo environment, in an order that leaves nothing billable.
 # Never run in this project; kept as the reviewed, ordered procedure.
 #
-#   FINCORE_AWS=confirm scripts/down.sh
+#   FINCORE_AWS=confirm scripts/down.sh      # FINCORE_PROFILE as for up.sh
 #
 # Terraform does not know about what controllers create at runtime, so
 # those go first, while the controllers are still running to clean up:
@@ -51,7 +51,8 @@ if kubectl get nodes >/dev/null 2>&1; then
 fi
 
 log "5/6 terraform destroy (about 20 minutes)"
-terraform -chdir="$ENV_DIR" destroy -input=false -auto-approve
+tf_profile_args
+terraform -chdir="$ENV_DIR" destroy -input=false -auto-approve ${TF_PROFILE_ARGS[@]+"${TF_PROFILE_ARGS[@]}"}
 
 log "6/6 leftover check in $REGION"
 left=0

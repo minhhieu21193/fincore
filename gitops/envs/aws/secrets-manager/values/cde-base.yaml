@@ -1,0 +1,15 @@
+# No Vault: both services log in with a password from Secrets Manager. db-init
+# sets it on every sync, so a rotation in Secrets Manager is applied by the
+# next sync and picked up by the pods on their next restart.
+database:
+  services:
+    - { name: payments, credentials: static }
+    - { name: ledger, credentials: static }
+secrets:
+  items:
+    ledger-db: { remote: fincore-ledger-db, keys: [password] }
+    vault-db-admin: null
+vaultClientCA:
+  enabled: false
+networkPolicies:
+  vaultNamespace: ""

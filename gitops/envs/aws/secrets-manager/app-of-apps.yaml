@@ -1,0 +1,16 @@
+# AWS without Vault (Terraform secrets_backend = "secrets-manager", the
+# small-team profile in terraform/envs/demo/profiles/small-team.tfvars).
+# Layered over ../app-of-apps.yaml by terraform/envs/demo/argocd.tf.
+#
+# The ledger logs in with a static password from Secrets Manager (CDE KMS key),
+# synced by External Secrets like payments-api's. What this gives up is listed
+# in docs/compliance-mapping.md (small-team profile).
+overlay: secrets-manager
+
+components:
+  vault-base: { enabled: false }
+  vault: { enabled: false }
+  vault-config: { enabled: false }
+  # Only the Vault snapshot job runs here on AWS (Aurora backs itself up);
+  # Velero still backs up the cluster state.
+  backups: { enabled: false }

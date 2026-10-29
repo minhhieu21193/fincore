@@ -44,9 +44,25 @@ variable "public_access_cidrs" {
   type        = list(string)
 }
 
-variable "kms_key_arn" {
-  description = "KMS key for Secrets envelope encryption, logs and EBS."
+variable "platform_kms_key_arn" {
+  description = "Platform KMS key: Secrets envelope encryption, control-plane logs, EBS."
   type        = string
+}
+
+variable "cde_kms_key_arn" {
+  description = "Cardholder-data-zone KMS key (payment-events queue, Aurora, CDE secrets)."
+  type        = string
+}
+
+variable "backups_kms_key_arn" {
+  description = "KMS key of the backup bucket."
+  type        = string
+}
+
+variable "system_node_count" {
+  description = "Nodes in the system node group (3 with Vault HA)."
+  type        = number
+  default     = 3
 }
 
 variable "log_retention_days" {
@@ -60,8 +76,13 @@ variable "hosted_zone_arn" {
   type        = string
 }
 
-variable "secrets_manager_arns" {
-  description = "Secrets External Secrets may read."
+variable "platform_secret_arns" {
+  description = "Secrets (platform key) External Secrets may read."
+  type        = list(string)
+}
+
+variable "cde_secret_arns" {
+  description = "Secrets (CDE key) External Secrets may read; the CDE key opens only these."
   type        = list(string)
 }
 
@@ -76,9 +97,16 @@ variable "tags" {
   default     = {}
 }
 
+variable "vault_enabled" {
+  description = "Vault runs in the cluster (Pod Identity roles for Vault and its snapshot job)."
+  type        = bool
+  default     = true
+}
+
 variable "vault_kms_key_arn" {
-  description = "KMS key Vault uses for auto-unseal."
+  description = "KMS key Vault uses for auto-unseal (null without Vault)."
   type        = string
+  default     = null
 }
 
 variable "ecr_repository_arns" {

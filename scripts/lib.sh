@@ -118,3 +118,15 @@ s3() {
 s3_latest() {
   s3 "?list-type=2&prefix=$1" | grep -o '<Key>[^<]*</Key>' | sed 's/<[^>]*>//g' | sort | tail -1
 }
+
+# tf_profile_args: sets TF_PROFILE_ARGS to the extra -var-file for FINCORE_PROFILE
+# (terraform/envs/demo/profiles/<name>.tfvars). up.sh and down.sh must agree,
+# so both read the same variable.
+TF_PROFILE_ARGS=()
+tf_profile_args() {
+  TF_PROFILE_ARGS=()
+  [[ -z "${FINCORE_PROFILE:-}" ]] && return 0
+  local f="profiles/$FINCORE_PROFILE.tfvars"
+  [[ -f "$ROOT/terraform/envs/demo/$f" ]] || die "unknown profile $FINCORE_PROFILE (no terraform/envs/demo/$f)"
+  TF_PROFILE_ARGS=("-var-file=$f")
+}

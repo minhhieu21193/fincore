@@ -6,7 +6,8 @@
 #   chart:          external Helm chart (repo, name, version), or
 #   path:           directory under gitops/ (a Helm chart unless plainManifests)
 #   valueFiles:     files under gitops/; gitops/envs/<env>/values/<component>.yaml
-#                   is always appended and may be absent
+#                   is always appended and may be absent, then
+#                   gitops/envs/<env>/<overlay>/values/<component>.yaml if an overlay is set
 #   clusterValues:  template rendered against these values into helm valuesObject
 #                   (used for account-specific values that never live in git)
 #   wave:           Argo CD sync wave (lower first)
@@ -19,6 +20,10 @@ repoURL: ""
 targetRevision: HEAD
 # -- Environment name: kind | aws
 env: ""
+
+# -- Optional variant of the environment, a directory under gitops/envs/<env>/
+# (aws: "secrets-manager", the small-team profile without Vault).
+overlay: ""
 
 # -- Set by kind-up.sh --restore until secrets and data are restored.
 restoreHold: false

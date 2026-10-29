@@ -46,7 +46,22 @@ Legend for the evidence column:
 | The Vault root token is revoked right after initialisation; configuration uses Kubernetes auth with a token whose audience is `vault` (the Kubernetes API rejects it) | `scripts/vault-init.sh`, `vault-config` Job | kind (kind-up log) | 8.2.2 shared and generic accounts are not used routinely; 7.2.5 |
 | Vault auto-unseal with a dedicated KMS key (Encrypt, Decrypt and DescribeKey only); recovery keys held offline | `terraform/envs/demo/main.tf` (`vault_kms`), `terraform/modules/eks/main.tf` | kind (local KMS emulator), AWS | 3.6.1 key-management procedures; 3.7.x (illustrative) |
 | Encryption in transit inside the cluster: Vault API and Raft traffic over TLS 1.3 (internal CA via cert-manager); the public ALB uses `ELBSecurityPolicy-TLS13-1-2-2021-06` | `gitops/platform/vault/values.yaml`, `gitops/envs/aws/values/payments-api.yaml` | kind, AWS | 4.2.1 strong cryptography over open, public networks |
-| Encryption at rest with customer-managed KMS keys (EKS Secrets, Aurora, SQS, EBS, logs, audit trail) | `terraform/` | AWS | 3.5.1 (illustrative; FinCore stores no PAN) |
+| Encryption at rest with customer-managed KMS keys, **one per data domain** (table below), each rotated every 90 days | `terraform/envs/demo/main.tf`, `terraform/modules/kms/` | AWS, static (`terraform test`) | 3.5.1 (illustrative; FinCore stores no PAN); 3.6.1 key-management procedures; 3.7.4 keys changed at the end of their cryptoperiod |
+| The CDE key can't be used directly. Its key policy denies Encrypt, Decrypt and GenerateDataKey to every IAM principal unless the call comes through SQS, RDS or Secrets Manager (`kms:ViaService`). An IAM policy with `kms:*` still cannot decrypt cardholder-data-zone data outside those services. | `terraform/modules/kms/main.tf` (`OnlyThroughServices`); the backups key likewise through S3 only | static (`terraform/modules/kms/tests`), AWS | 3.6.1.3 access to keys restricted to the fewest custodians necessary; 7.2.2 |
+| payments-api and the notifier may use only the CDE key, only through SQS, and only for the payment-events queue (`kms:EncryptionContext:aws:sqs:arn`). payments-api may GenerateDataKey and Decrypt; the notifier may only Decrypt. | `terraform/modules/eks/main.tf` (`payments_api`, `notifier`) | static (`terraform/modules/eks/tests`), AWS | 7.2.1, 7.2.2 access by need to know; 7.2.5 least privilege for application accounts |
+| External Secrets opens the CDE key only for the CDE secrets (`kms:EncryptionContext:SecretARN`); the backup writers (Velero, Vault snapshot) use only the backups key, only for the backup bucket (`kms:EncryptionContext:aws:s3:arn`) | `terraform/modules/eks/main.tf` (`external_secrets_cde`, `backups`) | static (`terraform/modules/eks/tests`), AWS | 7.2.2, 7.2.5 |
+
+KMS keys by data domain (all symmetric, customer-managed, rotated every 90 days):
+
+| Key | Encrypts | Who may use it |
+|---|---|---|
+| `fincore-demo-cde` | Payment-events queue and its dead-letter queue (SQS); Aurora storage, its log group and Performance Insights; the secrets that open the database (`fincore-payments-db`, `fincore-vault-db-admin` or `fincore-ledger-db`, the Aurora master secret) | Only through SQS, RDS and Secrets Manager. payments-api and the notifier, for the queue only; External Secrets, for those secrets only; CloudWatch Logs, for Aurora's log group only. 30-day deletion window. |
+| `fincore-demo-platform` | Kubernetes Secrets (EKS envelope encryption), EBS (system node root volumes, PersistentVolumes of Vault, Prometheus, Loki, Tempo), ECR images, VPC flow logs, EKS control-plane and WAF logs, `fincore-webhook-signing` | EKS, the EBS CSI driver, EC2 Auto Scaling (node group volumes, grants for AWS resources only), CloudWatch Logs, External Secrets |
+| `fincore-demo-backups` | The backup bucket (Velero cluster state, Vault Raft snapshots) | Only through S3, and only for the backup bucket: Velero and the Vault snapshot job. 30-day deletion window. |
+| `fincore-demo-vault-unseal` | Vault's root key (auto-unseal) | Vault's Pod Identity role: Encrypt, Decrypt and DescribeKey. Absent in the small-team profile. |
+| `fincore-demo-audit` | CloudTrail logs | CloudTrail and CloudWatch Logs, for the trail only (`terraform/modules/audit`) |
+
+Aurora's logs and Performance Insights use the CDE key, not the platform key: slow-query logs and Performance Insights keep SQL text, which belongs to the cardholder-data zone.
 | Static secrets from AWS Secrets Manager via External Secrets; nothing secret is committed. Locally generated material stays in the gitignored `.kube/`. | `gitops/apps/fincore-base/templates/externalsecrets.yaml` | kind, static | 8.3.2, 3.6.1 |
 
 ## Edge protection
@@ -63,6 +78,20 @@ Legend for the evidence column:
 | EKS control-plane logs (`api`, `audit`, `authenticator`, `controllerManager`, `scheduler`), KMS-encrypted | `terraform/modules/eks/main.tf` | AWS | 10.2.1, 10.2.2 |
 | Vault audit device: every request and response, with secrets HMAC'd, to stdout and collected with pod logs. Credential issuance to the ledger is traceable to its service account. | `vault-config` (`vault audit enable file`) | kind (`rotation.log`, audit excerpt) | 10.2.1.2 actions by administrative and application accounts; 10.2.2 |
 
+## Small-team profile
+
+`terraform/envs/demo/profiles/small-team.tfvars` (Terraform `secrets_backend = "secrets-manager"`, GitOps overlay `gitops/envs/aws/secrets-manager/`) removes Vault for a team that cannot operate it. Costs: [`cost.md`](cost.md#small-team-profile). Rendered and checked by `make check` (no Vault apps, the ledger reads its password from Secret `ledger-db`).
+
+| Changes | Effect on the controls above |
+|---|---|
+| The ledger logs in as its owner role with a **static password** from Secrets Manager (CDE key), synced by External Secrets, like payments-api | Loses "no static database password" (8.6.2 is then met by Secrets Manager rather than by having no password) and the 3-minute / 1-hour credential lifetime. 8.6.3 (periodic change) becomes a procedure: change the secret in Secrets Manager; db-init applies it on the next sync and pods pick it up on restart. No automatic rotation is configured; Secrets Manager rotation would need a rotation Lambda per secret. |
+| No Vault audit device | Credential reads are still logged, by CloudTrail (`GetSecretValue` by the External Secrets role, 10.2.1), but per-pod issuance is no longer traceable to a service account |
+| No Vault unseal key, no Vault and Vault-snapshot Pod Identity roles | Fewer keys and roles to manage |
+| Aurora admits only the CDE nodes' security group (the system nodes only needed it for Vault) | Narrower database access (1.3.1, 1.4.4) |
+| 2 system nodes and 1 NAT gateway | Availability, not compliance: losing the NAT's AZ cuts internet egress (webhooks to merchants) until it returns; AWS APIs keep working through the VPC endpoints |
+
+The KMS split, the CDE key's service-only use and the per-workload encryption-context conditions are the same in both profiles.
+
 ## Not covered (gaps a real assessment would raise)
 
 - **No QSA review.** The requirement numbers above are our reading of PCI DSS v4.0.1.
@@ -73,4 +102,6 @@ Legend for the evidence column:
 - **Audit logs are not centralised in-cluster yet.** Shipping Vault and application logs to Loki (and CloudWatch) is Phase 3. Cross-region replication of the CloudTrail bucket is left as a production step.
 - **NetworkPolicy start-up window.** A newly started pod is unrestricted for about a second, until the policy engine programs its rules. This was measured on kind (kindnet), and the VPC CNI's default "standard" mode behaves the same. The VPC CNI's strict mode closes the window, but it denies every pod without a policy cluster-wide, so it needs policies for all platform namespaces first.
 - **Penetration testing and segmentation testing (11.4).** The NetworkPolicy demo is a functional test, not a penetration test.
-- **The demo is single-region and single-account.** Production would separate the CDE into its own AWS account.
+- **The demo is single-region and single-account.** Production would separate the CDE into its own AWS account, so the CDE key and its data would sit behind an account boundary as well as a key policy.
+- **Karpenter node root volumes use the AWS-managed EBS key**, including the CDE nodes, whose disks hold container logs and `emptyDir` data of zone pods. Moving the CDE NodePool to the CDE key needs `ec2` added to its allowed services and `kms:CreateGrant` for the Karpenter controller role.
+- **Backups contain copies of CDE secrets.** Velero backs up the `fincore-cde` namespace, Kubernetes Secrets included, under the backups key. Whoever can read the backup bucket through S3 and use the backups key is therefore in CDE scope.

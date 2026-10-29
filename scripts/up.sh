@@ -3,6 +3,7 @@
 # Never run in this project; kept as the reviewed, ordered procedure.
 #
 #   FINCORE_AWS=confirm scripts/up.sh
+#   FINCORE_AWS=confirm FINCORE_PROFILE=small-team scripts/up.sh   # profiles/small-team.tfvars
 #
 # Order: state bucket (terraform/bootstrap, once) -> the demo environment
 # (VPC, EKS, Aurora, ...; Argo CD and the root app are installed by Terraform)
@@ -25,7 +26,8 @@ terraform -chdir="$ROOT/terraform/bootstrap" apply -input=false -auto-approve
 
 log "2/4 demo environment (about 25 minutes: EKS and Aurora dominate)"
 terraform -chdir="$ENV_DIR" init -input=false -backend-config=backend.hcl >/dev/null
-terraform -chdir="$ENV_DIR" apply -input=false -auto-approve
+tf_profile_args
+terraform -chdir="$ENV_DIR" apply -input=false -auto-approve ${TF_PROFILE_ARGS[@]+"${TF_PROFILE_ARGS[@]}"}
 
 log "3/4 kubeconfig"
 export KUBECONFIG="$ROOT/.kube/aws-config"

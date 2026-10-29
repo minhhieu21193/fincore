@@ -12,7 +12,7 @@ All of it runs on a laptop with `kind`, from the same manifests the AWS environm
 | **The whole cluster is deleted and restored from backups** (kind) | **RTO 18 min 14 s**, **RPO 8 min 36 s**; ledger balanced, Vault back with its data |
 | **A zone is lost** (kind) | paged in **~2 min**; payments back **13 s** after the zone returned; ledger balanced throughout |
 | **Throughput within the SLOs** (99.9 % non-5xx, 99 % under 300 ms) | **30 payments/s** on a 6-CPU laptop VM; served up to ~70/s with p50 ≈ 130 ms |
-| **AWS cost** (estimate: ap-southeast-1 list prices, idle) | **$34.33 / day**; $0.046 per 1,000 payments at demo load |
+| **AWS cost** (estimate: ap-southeast-1 list prices, idle) | **$34.39 / day**; $0.046 per 1,000 payments at demo load; small-team profile $31.69 / day |
 
 ## The problem
 
@@ -131,7 +131,7 @@ Metrics (Prometheus), logs (Loki, via Fluent Bit) and traces (Tempo, OTLP) are l
 
 The target in the plan was 300 payments/s; this laptop's 6-CPU VM, running the whole platform and a single PostgreSQL, sustains **30 payments/s within the SLOs**, serves up to ~70/s without errors (but with a slow tail), and falls over at ~100/s. That is the published number, not a projection; the AWS measurement belongs to a demo day ([results](docs/phase-3-results.md#c3-load-test)).
 
-**Cost** (AWS list prices, [`docs/cost.md`](docs/cost.md)): $1.43 per hour, $34.33 per day, about $1,030 per 30 days idle, with 3 of 9 nodes on Spot. Every price comes with its SKU and source file. `scripts/up.sh` creates the environment and `scripts/down.sh` destroys it in order and checks that nothing billable is left. OpenCost runs on kind with every node priced as the AWS instance type it stands for.
+**Cost** (AWS list prices, [`docs/cost.md`](docs/cost.md)): $1.43 per hour, $34.39 per day, about $1,032 per 30 days idle, with 3 of 9 nodes on Spot. Every price comes with its SKU and source file. `scripts/up.sh` creates the environment and `scripts/down.sh` destroys it in order and checks that nothing billable is left. OpenCost runs on kind with every node priced as the AWS instance type it stands for.
 
 ## Run it
 
@@ -178,6 +178,8 @@ Argo CD on kind syncs from your **local commits**: an in-cluster, read-only git 
   - the EBS CSI driver for Vault's Raft storage;
   - AWS WAF on the API's ALB;
   - a multi-region CloudTrail to an encrypted, versioned S3 bucket and CloudWatch Logs.
+- **KMS per data domain:** CDE (SQS, Aurora, the secrets that open it), platform (EKS Secrets, EBS, ECR, logs), backups, Vault unseal and audit. The CDE key works only through SQS, RDS and Secrets Manager. payments-api and the notifier may use it only for the payment-events queue (`kms:EncryptionContext`). Offline `terraform test` checks both ([compliance mapping](docs/compliance-mapping.md)).
+- **Profiles:** `FINCORE_PROFILE=small-team scripts/up.sh` runs 2 system nodes, one NAT gateway and Secrets Manager instead of Vault HA, for $31.69/day instead of $34.39 ([cost](docs/cost.md#small-team-profile)).
 
 ```bash
 cd terraform/bootstrap && terraform init && terraform apply -var aws_account_id=<id>
