@@ -57,6 +57,22 @@ demo-netpol: ## Phase 2 B3: NetworkPolicies isolate the cardholder-data zone
 demo-rotation: ## Phase 2 B2: the ledger's Vault-issued DB credentials rotate without a restart
 	scripts/demo-rotation.sh
 
+.PHONY: demo-observability
+demo-observability: ## Phase 3 C1: one payment followed from its trace to its logs to its ledger entry; dashboards have data
+	scripts/demo-observability.sh
+
+.PHONY: dr-drill
+dr-drill: ## Phase 3 C5: back up, delete the cluster, restore into a new one; RTO/RPO in docs/evidence/phase-3
+	scripts/dr-drill.sh
+
+.PHONY: aws-up
+aws-up: ## Create the AWS demo environment (spends money; FINCORE_AWS=confirm). Never run by CI
+	scripts/up.sh
+
+.PHONY: aws-down
+aws-down: ## Destroy it in order and check nothing billable is left (FINCORE_AWS=confirm)
+	scripts/down.sh
+
 .PHONY: vault-init
 vault-init: ## One-time Vault initialisation (run by kind-up; on EKS run it once by hand)
 	scripts/vault-init.sh
@@ -64,3 +80,11 @@ vault-init: ## One-time Vault initialisation (run by kind-up; on EKS run it once
 .PHONY: loadtest
 loadtest: ## k6 load test against a port-forwarded payments-api (RPS=50 DURATION=2m)
 	k6 run -e TARGET=$${TARGET:-http://localhost:8080} -e RPS=$${RPS:-50} -e DURATION=$${DURATION:-2m} loadtest/payments.js
+
+.PHONY: loadtest-report
+loadtest-report: ## Phase 3 C3: in-cluster capacity test, steps 20 to 150 payments/s, report in docs/evidence/phase-3 (STEPS=... HOLD=2m)
+	scripts/loadtest.sh
+
+.PHONY: chaos
+chaos: ## Phase 3 C4: pod kill, node drain, DB restart, zone loss; client/server impact and alert timeline in docs/evidence/phase-3
+	scripts/chaos.sh

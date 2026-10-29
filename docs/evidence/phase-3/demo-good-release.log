@@ -1,0 +1,22 @@
+==> stable: payments-api:0.1.3 (74675f959) -> releasing healthy build payments-api:0.1.3-rc.1793217028
+ ✔ built fincore/payments-api:0.1.3-rc.1793217028 (fault_rate=0)
+ ✔ published fincore-registry:5000/fincore/payments-api:0.1.3-rc.1793217028 (signed, SBOM attested (60 packages))
+ ✔ committed: deploy(kind): payments-api 0.1.3-rc.1793217028 (e085a3b)
+ ✔ Argo CD applied payments-api:0.1.3-rc.1793217028
+ ✔ canary started after 31s (hash 75d9c59b95)
+   [ 31s] phase=Progressing step=0/6 weight=- analysis=-
+   [ 36s] phase=Paused step=1/6 weight=- analysis=Running
+   [124s] phase=Paused step=3/6 weight=- analysis=Running
+   [188s] phase=Progressing step=4/6 weight=- analysis=Running
+   [193s] phase=Paused step=5/6 weight=- analysis=Running
+   [250s] phase=Progressing step=6/6 weight=- analysis=Running
+   [255s] phase=Healthy step=6/6 weight=- analysis=-
+ ✔ promoted to 100% after 255s
+   AnalysisRun payments-api-75d9c59b95-2: Successful
+     latency-p95: Successful — Successful:[0.18524553775444916], Successful:[0.17866666666666667], Successful:[0.196], Successful:[0.24636363636363628], Successful:[0.2915384615384616], Successful:[0.19631622795098805]
+     success-rate: Successful — Successful:[1], Successful:[1], Successful:[1], Successful:[1], Successful:[1], Successful:[1]
+ ✔ promotion backed by 12 successful measurement(s)
+==> reverting the release commit (rollbackWindow: immediate switch back)
+ ✔ back on payments-api:0.1.3
+
+ ✔ DEMO PASSED: healthy build promoted through all canary steps in 255s

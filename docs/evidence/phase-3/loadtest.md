@@ -1,0 +1,25 @@
+# Load test: payments capacity on kind
+
+Run 2026-10-28 21:26 UTC: k6 in the cluster, steps of 20,30,40,50,60,80,100,150 payments/s, each ramped over 20s and held for 2m, at most 300 concurrent requests.
+Background traffic from the traffic generator (10.0 payments/s) is part of the offered rate.
+Every figure is server-side (Prometheus), over the last 90s of each hold.
+Cluster: kind, 1 control-plane node and 3 workers (one CDE) sharing a 6-CPU, 9 GB Docker VM.
+
+| Offered (req/s) | Served (req/s) | p50 | p95 | p99 | 5xx | payments-api pods | ledger pods | CPU payments-api / ledger / PostgreSQL / cluster (cores) | Within SLO |
+|---:|---:|---:|---:|---:|---:|---:|---:|---|:---:|
+| 30 | 29.9 | 129 ms | 220 ms | 433 ms | 0 % | 3 | 4 | 0.14 / 0.1 / 0.24 / 1.91 | **no** |
+| 40 | 37.3 | 141 ms | 5000 ms | 5000 ms | 8.11 % | 3 | 4 | 0.2 / 0.15 / 0.39 / 2.59 | **no** |
+| 50 | 35.6 | 5000 ms | 5000 ms | 5000 ms | 61.27 % | 5 | 7 | 0.27 / 0.2 / 0.52 / 3.79 | **no** |
+| 60 | 32.7 | 5000 ms | 5000 ms | 5000 ms | 41.74 % | 6 | 7 | 0.34 / 0.26 / 0.69 / 4.04 | **no** |
+| 70 | 49.3 | 5000 ms | 5000 ms | 5000 ms | 32.88 % | 6 | 8 | 0.37 / 0.29 / 0.68 / 4.05 | **no** |
+| 90 | 37.6 | 5000 ms | 5000 ms | 5000 ms | 67.69 % | 7 | 8 | 0.34 / 0.23 / 0.63 / 4.17 | **no** |
+| 110 | 45.3 | 5000 ms | 5000 ms | 5000 ms | 28.94 % | 7 | 8 | 0.4 / 0.28 / 0.69 / 4.01 | **no** |
+| 160 | 44.4 | 5000 ms | 5000 ms | 5000 ms | 54.22 % | 7 | 8 | 0.36 / 0.26 / 0.71 / 4.19 | **no** |
+
+SLO per step: p99 <= 300 ms, 5xx <= 0.1 %, served >= 95 % of offered. The plan's target is 300 payments/s sustained within the SLOs.
+
+**Highest rate sustained within the SLOs: none of the steps.**
+
+k6 over the whole run: 39118 requests, 34341 dropped (concurrency limit reached), server errors 38.484 %, p99 10010 ms.
+
+Files: `loadtest-steps.json` (per step), `loadtest-timeseries.csv` (every 15 s), `loadtest-k6-summary.json` (client side).

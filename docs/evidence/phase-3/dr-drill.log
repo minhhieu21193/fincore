@@ -1,0 +1,118 @@
+21:51:48 ==> 1. before the disaster
+21:53:37 ==> newest backups: Velero velero-cluster-state-20261028214508 (21:45:08), Vault vault/20261028T214502Z.snap, PostgreSQL postgres/20261028T214502Z.sql.gz
+21:53:37 ==> data: 122016 payments (117665 of them in the newest dump), 109489 ledger transactions, imbalance 0; sample payment 15dba1e0-0496-40dd-929d-4dcba1a3c775
+21:53:38 ==> 2. disaster: deleting the cluster
+21:53:38 Deleting cluster "fincore" ...
+21:53:44 Deleted nodes: ["fincore-worker" "fincore-worker3" "fincore-control-plane" "fincore-worker2"]
+21:53:44  ✔ kind cluster 'fincore' deleted
+21:53:44 ==> cluster deleted (6s)
+21:53:44 ==> 3. recovery: scripts/kind-up.sh --restore
+21:53:44 ==> local PKI in <repo>/.kube/pki
+21:53:44 ==> creating kind cluster 'fincore'
+21:53:45 Creating cluster "fincore" ...
+21:53:45  • Ensuring node image (kindest/node:v1.36.4) 🖼️  ...
+21:53:45  ✓ Ensuring node image (kindest/node:v1.36.4) 🖼️
+21:53:45  • Preparing nodes 📦 📦 📦 📦   ...
+21:53:52  ✓ Preparing nodes 📦 📦 📦 📦 
+21:53:52  • Writing configuration 📜  ...
+21:53:53  ✓ Writing configuration 📜
+21:53:53  • Starting control-plane 🕹️  ...
+21:54:01  ✓ Starting control-plane 🕹️
+21:54:01  • Installing CNI 🔌  ...
+21:54:02  ✓ Installing CNI 🔌
+21:54:02  • Installing StorageClass 💾  ...
+21:54:02  ✓ Installing StorageClass 💾
+21:54:02  • Joining worker nodes 🚜  ...
+21:54:08  ✓ Joining worker nodes 🚜
+21:54:08  • Waiting ≤ 3m0s for control-plane = Ready ⏳  ...
+21:54:17  ✓ Waiting ≤ 3m0s for control-plane = Ready ⏳
+21:54:17  • Ready after 9s 💚
+21:54:18 Set kubectl context to "kind-fincore"
+21:54:18 You can now use your cluster with:
+21:54:18 
+21:54:18 kubectl cluster-info --context kind-fincore --kubeconfig <repo>/.kube/kind-config
+21:54:18 
+21:54:18 Thanks for using kind! 😊
+21:54:18  ✔ kubeconfig: <repo>/.kube/kind-config
+21:54:18  ✔ registry ready
+21:54:18 ==> backup store http://fincore-s3:8333 (SeaweedFS, outside the cluster)
+21:54:18  ✔ backup store ready (bucket fincore-backups)
+21:54:18 ==> node trust for fincore-registry:5000
+21:54:20  ✔ nodes trust the registry CA
+21:54:20 ==> building, publishing and signing images
+21:54:25  ✔ built fincore/gitserver:local
+21:54:31  ✔ loaded fincore/gitserver:local into kind/fincore
+21:54:36  ✔ built fincore/payments-api:0.1.3 (fault_rate=0)
+21:54:43  ✔ published fincore-registry:5000/fincore/payments-api:0.1.3 (signed, SBOM attested (60 packages))
+21:54:45  ✔ built fincore/ledger:0.1.3 (fault_rate=0)
+21:54:52  ✔ published fincore-registry:5000/fincore/ledger:0.1.3 (signed, SBOM attested (44 packages))
+21:54:53  ✔ built fincore/notifier:0.1.0 (fault_rate=0)
+21:55:00  ✔ published fincore-registry:5000/fincore/notifier:0.1.0 (signed, SBOM attested (55 packages))
+21:55:01  ✔ built fincore/webhook-sink:0.1.0 (fault_rate=0)
+21:55:07  ✔ published fincore-registry:5000/fincore/webhook-sink:0.1.0 (signed, SBOM attested (27 packages))
+21:55:07 ==> local secrets (generated once, never committed)
+21:55:08 ==> git server (serves <repo>/.git read-only to Argo CD)
+21:55:09  ✔ gitserver ready
+21:55:09 ==> Argo CD (chart 10.11.1)
+21:56:33  ✔ Argo CD ready
+21:56:33 ==> root application (app-of-apps, env=kind)
+21:56:33 Warning: metadata.finalizers: "resources-finalizer.argocd.argoproj.io": prefer a domain-qualified finalizer name including a path (/) to avoid accidental conflicts with other finalizer writers
+21:56:33 ==> restore 1/3: secrets (Velero, from the newest cluster-state backup)
+21:58:08  ✔ secrets restored from velero-cluster-state-20261028214508 (4 emulated Secrets Manager entries and the KMS seed)
+21:58:08 ==> restore 2/3: Vault (newest Raft snapshot)
+22:06:58    ==> restoring Vault from vault.snap (73379 bytes)
+22:07:05     ✔ snapshot restored; the temporary recovery key and root token no longer exist
+22:07:22     ✔ Vault restored on vault-0, unsealed with the original keyring
+22:07:22 ==> restore 3/3: PostgreSQL (newest pg_dumpall)
+22:07:44  ✔ data restored from vault/20261028T214502Z.snap and postgres/20261028T214502Z.sql.gz
+22:07:44 ==> releasing the restore hold: database bootstrap, Vault configuration, services, backups
+22:11:04  ✔ restore stages done in 871s
+22:11:04 ==> waiting for every application to be Synced and Healthy (first run: ~5-10 min)
+22:11:07  ✔ Vault is already initialised (seal: awskms, sealed: false)
+22:11:49 NAME                       SYNC STATUS   HEALTH STATUS
+22:11:49 argo-rollouts              Synced        Healthy
+22:11:49 backups                    Synced        Healthy
+22:11:49 cde-base                   Synced        Healthy
+22:11:49 cert-manager               Synced        Healthy
+22:11:49 cluster-issuers            Synced        Healthy
+22:11:49 dashboards                 Synced        Healthy
+22:11:49 external-secrets           Synced        Healthy
+22:11:49 fincore-base               Synced        Healthy
+22:11:49 fluent-bit                 Synced        Healthy
+22:11:49 kube-prometheus-stack      Synced        Healthy
+22:11:49 kyverno                    Synced        Healthy
+22:11:49 ledger                     Synced        Healthy
+22:11:49 local-infra                Synced        Healthy
+22:11:49 local-kms                  Synced        Healthy
+22:11:49 loki                       Synced        Healthy
+22:11:49 metrics-server             Synced        Healthy
+22:11:49 notifier                   Synced        Healthy
+22:11:49 opencost                   Synced        Healthy
+22:11:49 payments-api               Synced        Healthy
+22:11:49 policies                   Synced        Healthy
+22:11:49 prometheus-operator-crds   Synced        Healthy
+22:11:49 root                       Synced        Healthy
+22:11:49 secret-stores              Synced        Healthy
+22:11:49 slo                        Synced        Healthy
+22:11:49 tempo                      Synced        Healthy
+22:11:49 traffic-generator          Synced        Healthy
+22:11:49 vault                      Synced        Healthy
+22:11:49 vault-base                 Synced        Healthy
+22:11:49 vault-config               Synced        Healthy
+22:11:49 velero                     Synced        Healthy
+22:11:49 webhook-sink               Synced        Healthy
+22:11:49  ✔ FinCore is up on kind (45s)
+22:11:49 
+22:11:49   export KUBECONFIG=<repo>/.kube/kind-config
+22:11:49   Argo CD UI:     kubectl -n argocd port-forward svc/argocd-server 8081:80   (user admin)
+22:11:49                   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+22:11:49   Rollouts UI:    kubectl argo rollouts dashboard   (http://localhost:3100)
+22:11:49   Payments API:   kubectl -n fincore-cde port-forward svc/payments-api 8080:8080
+22:11:49   End-to-end:     make e2e
+22:11:49   Bad release:    make demo-bad-release
+22:11:49   Phase 2 demos:  make demo-policies | demo-netpol | demo-rotation
+22:11:49   Vault recovery keys: <repo>/.kube/vault-init.json (local only)
+22:11:52 ==> first payment captured: RTO 1094s
+22:11:52 ==> 4. after the recovery
+22:11:54 ==> payments: 117729 of 122016 back (dump held 117665); ledger transactions 105476 of 109489; imbalance 0
+22:11:54 ==> sample payment 15dba1e0-0496-40dd-929d-4dcba1a3c775: captured; Vault nodes unsealed: 3/3; Vault-issued DB credentials rendered: 2

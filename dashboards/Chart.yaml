@@ -1,0 +1,5 @@
+apiVersion: v2
+name: dashboards
+description: FinCore Grafana dashboards, loaded by Grafana's dashboard sidecar.
+type: application
+version: 0.1.0

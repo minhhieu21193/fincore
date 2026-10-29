@@ -37,3 +37,13 @@ output "database_subnet_cidrs" {
   description = "Database subnet CIDRs (Aurora)."
   value       = module.vpc.database_subnets_cidr_blocks
 }
+
+output "private_subnet_arns" {
+  description = "Private subnet ARNs, in the order of azs."
+  value       = module.vpc.private_subnet_arns
+}
+
+output "database_subnet_arns" {
+  description = "Database subnet ARNs, in the order of azs."
+  value       = module.vpc.database_subnet_arns
+}

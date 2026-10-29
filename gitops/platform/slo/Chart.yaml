@@ -1,0 +1,5 @@
+apiVersion: v2
+name: slo
+description: FinCore SLO recording rules and burn-rate alerts (rules/), tested with promtool (tests/).
+type: application
+version: 0.1.0

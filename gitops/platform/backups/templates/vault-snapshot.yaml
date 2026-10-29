@@ -1,0 +1,78 @@
+{{- if .Values.vault.enabled }}
+# Vault Raft snapshot: a consistent copy of all of Vault's (encrypted) storage.
+# Authenticates with Kubernetes auth as role vault-snapshot (snapshot-only
+# policy, gitops/platform/vault-config); no static token exists.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-snapshot
+  namespace: {{ .Values.vault.namespace }}
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vault-snapshot
+  namespace: {{ .Values.vault.namespace }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: vault-snapshot
+            app.kubernetes.io/part-of: fincore
+        spec:
+          serviceAccountName: vault-snapshot
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            {{- include "backups.podSecurity" . | nindent 12 }}
+          initContainers:
+            - name: snapshot
+              image: {{ .Values.images.vault }}
+              command: ["/bin/sh", "-ec"]
+              args:
+                - >-
+                  date -u +%Y%m%dT%H%M%SZ > /backup/started;
+                  VAULT_TOKEN="$(vault write -field=token auth/kubernetes/login role=vault-snapshot jwt=@/var/run/secrets/vault/token)";
+                  export VAULT_TOKEN;
+                  vault operator raft snapshot save /backup/vault.snap;
+                  echo "snapshot taken ($(wc -c < /backup/vault.snap) bytes)"
+              env:
+                - { name: VAULT_ADDR, value: {{ .Values.vault.addr | quote }} }
+                - { name: VAULT_CACERT, value: /vault-tls/ca.crt }
+                - { name: HOME, value: /tmp }
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits: { memory: 128Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: [ALL] }
+              volumeMounts:
+                - { name: backup, mountPath: /backup }
+                - { name: tmp, mountPath: /tmp }
+                - { name: vault-token, mountPath: /var/run/secrets/vault, readOnly: true }
+                - { name: vault-tls, mountPath: /vault-tls, readOnly: true }
+          containers:
+            {{- include "backups.uploader" (dict "root" $ "file" "vault.snap" "prefix" "vault" "ext" "snap") | nindent 12 }}
+          volumes:
+            - { name: backup, emptyDir: {} }
+            - { name: tmp, emptyDir: {} }
+            # Short-lived token for Vault only (audience "vault").
+            - name: vault-token
+              projected:
+                sources:
+                  - serviceAccountToken: { path: token, audience: vault, expirationSeconds: 600 }
+            - name: vault-tls
+              secret:
+                secretName: vault-server-tls
+                items: [{ key: ca.crt, path: ca.crt }]
+{{- end }}

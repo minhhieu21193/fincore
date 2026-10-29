@@ -5,7 +5,11 @@ env:
   DB_NAME: payments
   DB_USER: payments
   DB_PORT: "5432"
-  DB_MAX_CONNS: "10"
+  # Connection budget: pods x pool. At maxReplicas (12) this service opens at
+  # most 60 connections; with the ledger (8 x 5) that is 100 in total, well under
+  # the database's limit. A pool of 10 let autoscaling reach 200 backends,
+  # and the kind database ran out of memory in the load test (decisions log).
+  DB_MAX_CONNS: "5"
   PROCESSOR_LATENCY: 40ms
   PROCESSOR_JITTER: 30ms
   PROCESSOR_DECLINE_RATE: "0.02"

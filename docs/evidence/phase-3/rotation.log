@@ -1,0 +1,32 @@
+==> ledger pods (TTL of Vault-issued database users: 3m)
+   ledger-bfc979bdb-2l62g  containers=app,vault-agent  restarts=0
+   ledger-bfc979bdb-l8s79  containers=app,vault-agent  restarts=0
+   rollout.argoproj.io/ledger
+   static ledger password in the cluster: none
+   ledger owner role can log in: f
+==> watching PostgreSQL while the traffic generator keeps posting payments
+   [  0s] connected as: v-kubernet-ledger-NsEUwKgHzuY059s6rmwY-1793216818(4 conns) v-kubernet-ledger-oTjShMF1jARJK879tafk-1793216821(4 conns) | users in pg_roles: 4 | revoked so far: 0
+   [ 11s] connected as: v-kubernet-ledger-NsEUwKgHzuY059s6rmwY-1793216818(1 conns) v-kubernet-ledger-oTjShMF1jARJK879tafk-1793216821(1 conns) | users in pg_roles: 4 | revoked so far: 0
+   [ 71s] connected as: v-kubernet-ledger-NsEUwKgHzuY059s6rmwY-1793216818(1 conns) v-kubernet-ledger-oTjShMF1jARJK879tafk-1793216821(2 conns) | users in pg_roles: 2 | revoked so far: 0
+   [ 87s] connected as: v-kubernet-ledger-NsEUwKgHzuY059s6rmwY-1793216818(1 conns) v-kubernet-ledger-oTjShMF1jARJK879tafk-1793216821(1 conns) | users in pg_roles: 2 | revoked so far: 0
+   [120s] connected as: v-kubernet-ledger-NsEUwKgHzuY059s6rmwY-1793216818(1 conns) v-kubernet-ledger-PkpPy109cREKQTWILJSq-1793216952(1 conns) | users in pg_roles: 4 | revoked so far: 0
+   [125s] connected as: v-kubernet-ledger-PkpPy109cREKQTWILJSq-1793216952(1 conns) v-kubernet-ledger-mfO09rLNftj0Ro39sndy-1793216945(1 conns) | users in pg_roles: 4 | revoked so far: 0
+   [153s] connected as: v-kubernet-ledger-mfO09rLNftj0Ro39sndy-1793216945(1 conns) | users in pg_roles: 4 | revoked so far: 0
+   [158s] connected as: v-kubernet-ledger-PkpPy109cREKQTWILJSq-1793216952(1 conns) v-kubernet-ledger-mfO09rLNftj0Ro39sndy-1793216945(1 conns) | users in pg_roles: 4 | revoked so far: 0
+ ✔ every pod moved to a new Vault-issued user and 2 expired user(s) were dropped (164s)
+==> the same pods kept running
+   pods before: ledger-bfc979bdb-2l62g ledger-bfc979bdb-l8s79 (restarts 0)
+   pods after:  ledger-bfc979bdb-2l62g ledger-bfc979bdb-l8s79 (restarts 0)
+ ✔ no restart, no replacement
+   ledger-bfc979bdb-2l62g: database credentials rotated: v-kubernet-ledger-oTjShMF1jARJK879tafk-1793216821 -> v-kubernet-ledger-PkpPy109cREKQTWILJSq-1793216952
+   ledger-bfc979bdb-l8s79: database credentials rotated: v-kubernet-ledger-NsEUwKgHzuY059s6rmwY-1793216818 -> v-kubernet-ledger-mfO09rLNftj0Ro39sndy-1793216945
+==> no errors during the rotation (Prometheus, last 194s)
+   ledger        requests=1833  5xx=0
+   payments-api  requests=1933  5xx=0
+   fincore_db_credential_changes_total increase: 2
+ ✔ traffic flowed and nothing failed
+==> Vault audit log: credentials issued to the ledger during the window
+   2026-10-28T19:49:05.162973333Z  fincore-cde/ledger  read database/creds/ledger  lease vcYIjG8fdLyY6nQNE6IkUFnl
+   2026-10-28T19:49:12.463683753Z  fincore-cde/ledger  read database/creds/ledger  lease M3znSqrpzpwLbgq00VZrJ76z
+
+ ✔ DEMO PASSED: the ledger's database credentials rotated under load without a restart

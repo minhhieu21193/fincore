@@ -32,3 +32,13 @@ output "aurora_endpoint" {
   description = "Aurora writer endpoint."
   value       = module.aurora.endpoint
 }
+
+output "aurora_cluster_id" {
+  description = "Aurora cluster identifier (scripts/chaos-aws.sh failover)."
+  value       = module.aurora.cluster_id
+}
+
+output "fis_az_loss_template_id" {
+  description = "FIS experiment template: lose the first availability zone (scripts/chaos-aws.sh)."
+  value       = module.chaos.az_loss_template_id
+}

@@ -26,6 +26,11 @@ vault write auth/kubernetes/role/vault-configurer \
   bound_service_account_names=vault-configurer bound_service_account_namespaces="$POD_NAMESPACE" \
   audience=vault token_policies=vault-configurer token_ttl=10m token_max_ttl=15m >/dev/null
 
+# Backups: the snapshot job's service account gets the snapshot-only policy.
+vault write auth/kubernetes/role/vault-snapshot \
+  bound_service_account_names=vault-snapshot bound_service_account_namespaces="$POD_NAMESPACE" \
+  audience=vault token_policies=vault-snapshot token_ttl=5m token_max_ttl=10m >/dev/null
+log "role vault-snapshot: Raft snapshots only, sa=$POD_NAMESPACE/vault-snapshot"
 # Database secrets engine.
 vault secrets list | grep -q '^database/' || vault secrets enable -path=database database
 conn="database/config/$DB_CONNECTION"

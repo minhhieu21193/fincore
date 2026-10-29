@@ -1,0 +1,246 @@
+# FinCore SLOs (30-day window), as recording rules and multi-window,
+# multi-burn-rate alerts (Google SRE workbook, chapter 5).
+#
+#   payments-availability  99.9 % of POST /v1/payments answered without a 5xx
+#                          (declines, 402, and invalid requests, 422, are
+#                          correct answers). Error budget 0.1 %.
+#   payments-latency       99 % of POST /v1/payments answered in under 300 ms
+#                          (the le="0.3" histogram bucket). Error budget 1 %.
+#
+# Burn rate = observed bad ratio / error budget. Both windows of a pair must
+# exceed it: the long window proves the burn is significant, the short one that
+# it is still happening, so an alert resolves minutes after the incident ends.
+#
+#   page:   14.4x over 1h and 5m  (2 % of the monthly budget in 1 hour)
+#            6x   over 6h and 30m (5 % in 6 hours)
+#   ticket:  3x   over 1d and 2h  (10 % in 1 day)
+#            1x   over 3d and 6h  (10 % in 3 days)
+#
+# This file is the source of truth: the slo chart wraps it in a
+# PrometheusRule, and `make check` runs tests/slo.test.yaml against it with
+# promtool.
+groups:
+  - name: fincore-slo-recording
+    rules:
+      - record: fincore:payments_availability:error_ratio_rate5m
+        expr: |
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments",code=~"5.."}[5m]) or vector(0))
+          /
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments"}[5m]))
+        labels:
+          slo: payments-availability
+      - record: fincore:payments_availability:error_ratio_rate30m
+        expr: |
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments",code=~"5.."}[30m]) or vector(0))
+          /
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments"}[30m]))
+        labels:
+          slo: payments-availability
+      - record: fincore:payments_availability:error_ratio_rate1h
+        expr: |
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments",code=~"5.."}[1h]) or vector(0))
+          /
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments"}[1h]))
+        labels:
+          slo: payments-availability
+      - record: fincore:payments_availability:error_ratio_rate2h
+        expr: |
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments",code=~"5.."}[2h]) or vector(0))
+          /
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments"}[2h]))
+        labels:
+          slo: payments-availability
+      - record: fincore:payments_availability:error_ratio_rate6h
+        expr: |
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments",code=~"5.."}[6h]) or vector(0))
+          /
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments"}[6h]))
+        labels:
+          slo: payments-availability
+      - record: fincore:payments_availability:error_ratio_rate1d
+        expr: |
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments",code=~"5.."}[1d]) or vector(0))
+          /
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments"}[1d]))
+        labels:
+          slo: payments-availability
+      - record: fincore:payments_availability:error_ratio_rate3d
+        expr: |
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments",code=~"5.."}[3d]) or vector(0))
+          /
+          sum(rate(http_requests_total{app="payments-api",route="POST /v1/payments"}[3d]))
+        labels:
+          slo: payments-availability
+      - record: fincore:payments_latency:slow_ratio_rate5m
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{app="payments-api",route="POST /v1/payments",le="0.3"}[5m]))
+            /
+            sum(rate(http_request_duration_seconds_count{app="payments-api",route="POST /v1/payments"}[5m]))
+          )
+        labels:
+          slo: payments-latency
+      - record: fincore:payments_latency:slow_ratio_rate30m
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{app="payments-api",route="POST /v1/payments",le="0.3"}[30m]))
+            /
+            sum(rate(http_request_duration_seconds_count{app="payments-api",route="POST /v1/payments"}[30m]))
+          )
+        labels:
+          slo: payments-latency
+      - record: fincore:payments_latency:slow_ratio_rate1h
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{app="payments-api",route="POST /v1/payments",le="0.3"}[1h]))
+            /
+            sum(rate(http_request_duration_seconds_count{app="payments-api",route="POST /v1/payments"}[1h]))
+          )
+        labels:
+          slo: payments-latency
+      - record: fincore:payments_latency:slow_ratio_rate2h
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{app="payments-api",route="POST /v1/payments",le="0.3"}[2h]))
+            /
+            sum(rate(http_request_duration_seconds_count{app="payments-api",route="POST /v1/payments"}[2h]))
+          )
+        labels:
+          slo: payments-latency
+      - record: fincore:payments_latency:slow_ratio_rate6h
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{app="payments-api",route="POST /v1/payments",le="0.3"}[6h]))
+            /
+            sum(rate(http_request_duration_seconds_count{app="payments-api",route="POST /v1/payments"}[6h]))
+          )
+        labels:
+          slo: payments-latency
+      - record: fincore:payments_latency:slow_ratio_rate1d
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{app="payments-api",route="POST /v1/payments",le="0.3"}[1d]))
+            /
+            sum(rate(http_request_duration_seconds_count{app="payments-api",route="POST /v1/payments"}[1d]))
+          )
+        labels:
+          slo: payments-latency
+      - record: fincore:payments_latency:slow_ratio_rate3d
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{app="payments-api",route="POST /v1/payments",le="0.3"}[3d]))
+            /
+            sum(rate(http_request_duration_seconds_count{app="payments-api",route="POST /v1/payments"}[3d]))
+          )
+        labels:
+          slo: payments-latency
+  - name: fincore-slo-alerts
+    rules:
+      - alert: PaymentsAvailabilityBudgetBurn
+        expr: |
+          (
+            fincore:payments_availability:error_ratio_rate1h > 14.4 * 0.001
+            and
+            fincore:payments_availability:error_ratio_rate5m > 14.4 * 0.001
+          )
+          or
+          (
+            fincore:payments_availability:error_ratio_rate6h > 6 * 0.001
+            and
+            fincore:payments_availability:error_ratio_rate30m > 6 * 0.001
+          )
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: Payments are failing (5xx) fast enough to exhaust the 99.9 % availability budget
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
+      - alert: PaymentsAvailabilityBudgetBurn
+        expr: |
+          (
+            fincore:payments_availability:error_ratio_rate1d > 3 * 0.001
+            and
+            fincore:payments_availability:error_ratio_rate2h > 3 * 0.001
+          )
+          or
+          (
+            fincore:payments_availability:error_ratio_rate3d > 1 * 0.001
+            and
+            fincore:payments_availability:error_ratio_rate6h > 1 * 0.001
+          )
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Payments 5xx are slowly eating the 99.9 % availability budget
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
+      - alert: PaymentsLatencyBudgetBurn
+        expr: |
+          (
+            fincore:payments_latency:slow_ratio_rate1h > 14.4 * 0.01
+            and
+            fincore:payments_latency:slow_ratio_rate5m > 14.4 * 0.01
+          )
+          or
+          (
+            fincore:payments_latency:slow_ratio_rate6h > 6 * 0.01
+            and
+            fincore:payments_latency:slow_ratio_rate30m > 6 * 0.01
+          )
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: Payments are slower than 300 ms often enough to exhaust the 99 % latency budget
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
+      - alert: PaymentsLatencyBudgetBurn
+        expr: |
+          (
+            fincore:payments_latency:slow_ratio_rate1d > 3 * 0.01
+            and
+            fincore:payments_latency:slow_ratio_rate2h > 3 * 0.01
+          )
+          or
+          (
+            fincore:payments_latency:slow_ratio_rate3d > 1 * 0.01
+            and
+            fincore:payments_latency:slow_ratio_rate6h > 1 * 0.01
+          )
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: Payments slower than 300 ms are slowly eating the 99 % latency budget
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
+      # Not an SLO: an invariant. Any imbalance means money was created or lost.
+      - alert: LedgerImbalance
+        expr: max(abs(ledger_imbalance_minor_units)) > 0
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: The ledger's debits and credits no longer sum to zero
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/ledger-imbalance.md
+  # The burn-rate alerts count what the servers report. When no payments-api
+  # (or ledger) instance can be scraped at all (zone loss, crash loop), there
+  # is nothing to count, so a total outage is caught here instead.
+  - name: fincore-availability
+    rules:
+      - alert: PaymentsAPIUnavailable
+        expr: absent(up{job="fincore-cde/payments-api"} == 1)
+        for: 1m
+        labels:
+          severity: page
+          slo: payments-availability
+        annotations:
+          summary: No payments-api instance is reachable
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md
+      - alert: LedgerUnavailable
+        expr: absent(up{job="fincore-cde/ledger"} == 1)
+        for: 1m
+        labels:
+          severity: page
+          slo: payments-availability
+        annotations:
+          summary: No ledger instance is reachable, so no payment can be captured
+          runbook_url: https://github.com/minhhieu21193/fincore/blob/main/docs/runbooks/payment-failures-spike.md

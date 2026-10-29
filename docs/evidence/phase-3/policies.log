@@ -1,0 +1,76 @@
+==> preparing images in the registry (pushed by scripts/publish-image.sh)
+ ✔ published fincore-registry:5000/fincore/demo-unsigned:1793216811 (unsigned)
+ ✔ published fincore-registry:5000/fincore/demo-no-sbom:1793216811 (signed)
+ ✔ published fincore-registry:5000/fincore/demo-retagged:1793216811 (signed, SBOM attested (55 packages))
+ ✔ published fincore-registry:5000/fincore/demo-retagged:1793216811 (unsigned)
+
+==> 1. unsigned image
+   Error from server: error when creating "STDIN": admission webhook "ivpol.validate.kyverno.svc-fail-finegrained-verify-fincore-images" denied the request: 
+   Policy verify-fincore-images failed: image is not signed by the FinCore release pipeline
+ ✔ rejected as expected
+
+==> 2. signed image without an SBOM attestation
+   Error from server: error when creating "STDIN": admission webhook "ivpol.validate.kyverno.svc-fail-finegrained-verify-fincore-images" denied the request: 
+   Policy verify-fincore-images failed: image has no signed SBOM attestation (SPDX)
+ ✔ rejected as expected
+
+==> 3. signed tag overwritten with unsigned content (the signature binds the digest, not the tag)
+   Error from server: error when creating "STDIN": admission webhook "ivpol.validate.kyverno.svc-fail-finegrained-verify-fincore-images" denied the request: 
+   Policy verify-fincore-images failed: image is not signed by the FinCore release pipeline
+ ✔ rejected as expected
+
+==> 4. image from a foreign registry
+   Error from server: error when creating "STDIN": admission webhook "vpol.validate.kyverno.svc-fail-249117b8" denied the request: Policy 
+   restrict-image-registries failed: images must come from fincore-registry:5000/fincore/* or the approved third-party list; rejected: docker.io/library/nginx:1.29
+ ✔ rejected as expected
+
+==> 5. root container in a Deployment (rejected at the Deployment, before any pod exists)
+   Warning: would violate PodSecurity "restricted:latest": runAsUser=0 (pod must not set runAsUser=0)
+   Error from server: error when creating "STDIN": admission webhook "vpol.validate.kyverno.svc-fail-249117b8" denied the request: Policy require-non-root failed: 
+   root containers are not allowed (runAsNonRoot must be true and runAsUser must not be 0): app
+ ✔ rejected as expected
+
+==> 6. root container as a bare Pod (Pod Security 'restricted' and Kyverno both forbid it)
+   Error from server (Forbidden): error when creating "STDIN": pods "demo-root-pod-1793216811" is forbidden: violates PodSecurity "restricted:latest": 
+   runAsNonRoot != true (pod must not set securityContext.runAsNonRoot=false), runAsUser=0 (pod must not set runAsUser=0)
+ ✔ rejected as expected
+
+==> 7. writable root filesystem
+   Error from server: error when creating "STDIN": admission webhook "vpol.validate.kyverno.svc-fail-249117b8" denied the request: Policy 
+   require-read-only-root-fs failed: readOnlyRootFilesystem must be true for: app
+ ✔ rejected as expected
+
+==> 8. no memory limit
+   Error from server: error when creating "STDIN": admission webhook "vpol.validate.kyverno.svc-fail-249117b8" denied the request: Policy require-resources 
+   failed: requests.cpu, requests.memory and limits.memory are required for: app
+ ✔ rejected as expected
+
+==> 9. a pod outside the zone tolerating the CDE taint
+   Error from server: error when creating "STDIN": admission webhook "vpol.validate.kyverno.svc-fail-990984c9" denied the request: Policy 
+   no-cde-tolerations-outside-zone failed: only cardholder-data-zone workloads (fincore-cde) may tolerate the fincore.io/zone taint, explicitly or with a blanket 
+   toleration
+ ✔ rejected as expected
+
+==> 10. a cardholder-data-zone pod off the CDE nodes
+   Error from server: error when creating "STDIN": admission webhook "vpol.validate.kyverno.svc-fail-2c3d158e" denied the request: Policy cde-pods-on-cde-nodes 
+   failed: pods in the cardholder-data zone must run on CDE nodes (nodeSelector fincore.io/node-role=cde)
+ ✔ rejected as expected
+
+==> 11. control: signed, SBOM-attested, compliant image
+ ✔ admitted: pod/demo-compliant-1793216811 created
+   image as admitted: fincore-registry:5000/fincore/payments-api:0.1.3@sha256:fd02f57453532d86b7e45e27598dacdbe81428b38c4e04fe80eef607a80996d1
+ ✔ tag resolved to the verified digest at admission
+
+==> policies in force
+NAME                                                                   AGE   READY
+validatingpolicy.policies.kyverno.io/cde-pods-on-cde-nodes             13m   true
+validatingpolicy.policies.kyverno.io/no-cde-tolerations-outside-zone   13m   true
+validatingpolicy.policies.kyverno.io/require-non-root                  13m   true
+validatingpolicy.policies.kyverno.io/require-read-only-root-fs         13m   true
+validatingpolicy.policies.kyverno.io/require-resources                 13m   true
+validatingpolicy.policies.kyverno.io/restrict-image-registries         13m   true
+
+NAME                                                              AGE   READY
+imagevalidatingpolicy.policies.kyverno.io/verify-fincore-images   13m   true
+
+ ✔ DEMO PASSED: unsigned, unattested, foreign, root and non-compliant workloads are rejected; signed ones are admitted by digest

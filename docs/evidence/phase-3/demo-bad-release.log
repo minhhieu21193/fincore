@@ -1,0 +1,52 @@
+==> stable: payments-api:0.1.3 (ReplicaSet hash 74675f959)
+==> releasing deliberately bad build payments-api:0.1.3-bad.1793217305
+ ✔ built fincore/payments-api:0.1.3-bad.1793217305 (fault_rate=0.5)
+ ✔ published fincore-registry:5000/fincore/payments-api:0.1.3-bad.1793217305 (signed, SBOM attested (60 packages))
+ ✔ committed: deploy(kind): payments-api 0.1.3-bad.1793217305 (deliberately bad build: 0.5 of requests fail) (f454167)
+ ✔ Argo CD applied payments-api:0.1.3-bad.1793217305
+==> waiting for Argo CD to sync and the canary to start
+ ✔ canary started after 109s (hash 577b6b8d9f)
+==> watching the rollout (analysis: success rate >= 99%, p95 <= 300ms on canary pods only)
+   [109s] phase=Progressing step=0 analysis=- aborted=false
+   [120s] phase=Paused step=1 analysis= aborted=false
+   [125s] phase=Paused step=1 analysis=Running aborted=false
+   [212s] phase=Degraded step=0 analysis=- aborted=true
+ ✔ Rollouts ABORTED the canary automatically 212s after the release commit
+   message: RolloutAborted: Rollout aborted update to revision 4: Background analysis phase error/failed: Metric "success-rate" assessed Failed due to failed (2) > failureLimit (1)
+   AnalysisRun payments-api-577b6b8d9f-4: Failed
+     latency-p95: Failed — measurements: Failed:[0.4899887905993223], Failed:[0.38666666666666694]
+     success-rate: Failed — measurements: Failed:[0.3897555632192024], Failed:[0.4074074074074074]
+ ✔ abort backed by 4 failed measurement(s) with data
+ ✔ canary scaled to 0; 100% of traffic on stable 74675f959 (payments-api:0.1.3)
+==> restoring git as the source of truth: reverting the bad release commit
+ ✔ reverted (3a471d0); rollout Healthy on payments-api:0.1.3
+
+ ✔ DEMO PASSED: bad build detected by canary analysis and rolled back automatically in 212s
+Name:            payments-api
+Namespace:       fincore-cde
+Status:          ✔ Healthy
+Strategy:        Canary
+  Step:          6/6
+  SetWeight:     100
+  ActualWeight:  100
+Images:          fincore-registry:5000/fincore/payments-api:0.1.3 (stable)
+Replicas:
+  Desired:       3
+  Current:       3
+  Updated:       3
+  Ready:         3
+  Available:     3
+
+NAME                                     KIND         STATUS        AGE    INFO
+⟳ payments-api                           Rollout      ✔ Healthy     19m    
+├──# revision:5                                                            
+│  └──⧉ payments-api-74675f959           ReplicaSet   ✔ Healthy     19m    stable
+│     ├──□ payments-api-74675f959-jvhsz  Pod          ✔ Running     4m11s  ready:1/1
+│     ├──□ payments-api-74675f959-lprwf  Pod          ✔ Running     4m8s   ready:1/1
+│     └──□ payments-api-74675f959-qm6zk  Pod          ✔ Running     33s    ready:1/1
+├──# revision:4                                                            
+│  ├──⧉ payments-api-577b6b8d9f          ReplicaSet   • ScaledDown  2m18s  
+│  └──α payments-api-577b6b8d9f-4        AnalysisRun  ✖ Failed      2m3s   ✖ 4
+└──# revision:2                                                            
+   ├──⧉ payments-api-75d9c59b95          ReplicaSet   • ScaledDown  8m10s  
+   └──α payments-api-75d9c59b95-2        AnalysisRun  ✔ Successful  8m5s   ✔ 12

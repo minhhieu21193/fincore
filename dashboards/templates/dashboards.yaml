@@ -1,0 +1,16 @@
+{{- /* One ConfigMap per dashboard; Grafana's sidecar loads every ConfigMap
+labelled grafana_dashboard=1 (kube-prometheus-stack defaults). */ -}}
+{{- range $path, $_ := .Files.Glob "json/*.json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-{{ base $path | trimSuffix ".json" }}
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: {{ $.Values.folder | quote }}
+data:
+  {{ base $path }}: |-
+    {{- $.Files.Get $path | nindent 4 }}
+{{- end }}

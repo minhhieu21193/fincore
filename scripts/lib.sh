@@ -24,6 +24,15 @@ PKI="$ROOT/.kube/pki"
 # Supply-chain tools run as pinned containers, so nothing extra is installed on the host.
 COSIGN_IMAGE="ghcr.io/sigstore/cosign/cosign:v3.1.4@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d"
 SYFT_IMAGE="anchore/syft:v1.55.0@sha256:4cc92b64ca74ffca4c94d4c8fcc01f217731375300be14d0b6eeb2e82eaa110a"
+# Backup store, the kind stand-in for S3: SeaweedFS in a container outside the
+# cluster (on the "kind" network), so backups survive the cluster's deletion.
+# Pods reach it as $S3_ENDPOINT; the host through the published port.
+S3_CONTAINER="fincore-s3"
+S3_IMAGE="chrislusf/seaweedfs:4.51@sha256:f7a49e3f3972ebed5be2ed4befa4a0c68eb7bdddba6e692d42729ceb545134b8"
+S3_ENDPOINT="http://fincore-s3:8333"
+S3_HOST_ENDPOINT="http://127.0.0.1:8333"
+S3_BUCKET="fincore-backups"
+S3_CREDENTIALS="$PKI/s3-credentials.env"   # S3_ACCESS_KEY / S3_SECRET_KEY, generated once
 # Namespaces: the cardholder-data zone and everything else.
 NS_CDE="fincore-cde"
 NS_APP="fincore"
@@ -97,4 +106,15 @@ wait_for() {
     (( SECONDS - start > timeout )) && die "timed out after ${timeout}s waiting for: $what"
     sleep 3
   done
+}
+
+# s3 <curl args...> <path>: signed request to the local backup store from the host.
+s3() {
+  # shellcheck disable=SC1090
+  source "$S3_CREDENTIALS"
+  curl -sf --aws-sigv4 "aws:amz:us-east-1:s3" --user "$S3_ACCESS_KEY:$S3_SECRET_KEY" "${@:1:$#-1}" "$S3_HOST_ENDPOINT/$S3_BUCKET/${!#}"
+}
+# s3_latest <prefix>: key of the newest object under prefix (keys embed a UTC timestamp).
+s3_latest() {
+  s3 "?list-type=2&prefix=$1" | grep -o '<Key>[^<]*</Key>' | sed 's/<[^>]*>//g' | sort | tail -1
 }

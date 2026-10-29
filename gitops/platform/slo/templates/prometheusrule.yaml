@@ -1,0 +1,7 @@
+{{- /* The rules file is plain Prometheus format so promtool can test it as is. */ -}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: fincore-slo
+spec:
+  {{- .Files.Get "rules/fincore-slo.rules.yaml" | nindent 2 }}

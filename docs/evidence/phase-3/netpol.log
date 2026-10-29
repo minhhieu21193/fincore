@@ -1,0 +1,37 @@
+==> building and publishing the probe image (signed + SBOM, like every FinCore image)
+ ✔ published fincore-registry:5000/fincore/netprobe:netprobe-6453d57 (signed, SBOM attested (9 packages))
+==> 1. from OUTSIDE the zone: a pod in namespace fincore (where the notifier runs)
+   ledger                       ledger.fincore-cde.svc.cluster.local:8080            BLOCKED (no answer within 4s)
+   payments-api                 payments-api.fincore-cde.svc.cluster.local:8080      BLOCKED (no answer within 4s)
+   postgres                     postgres.fincore-data.svc.cluster.local:5432         BLOCKED (no answer within 4s)
+   queue                        elasticmq.fincore-data.svc.cluster.local:9324        BLOCKED (no answer within 4s)
+   internet(control)            1.1.1.1:443                                          OPEN
+ ✔ ledger: BLOCKED
+ ✔ payments-api: BLOCKED
+ ✔ postgres: BLOCKED
+ ✔ queue: BLOCKED
+ ✔ internet(control): OPEN
+==> 2. from INSIDE the zone: a pod in fincore-cde on a CDE node, with no allow rule of its own
+   internet                     1.1.1.1:443                                          BLOCKED (no answer within 4s)
+   ledger                       ledger.fincore-cde.svc.cluster.local:8080            BLOCKED (no answer within 4s)
+   postgres                     postgres.fincore-data.svc.cluster.local:5432         BLOCKED (no answer within 4s)
+ ✔ internet: BLOCKED
+ ✔ ledger: BLOCKED
+ ✔ postgres: BLOCKED
+==> 3. the legitimate path still works: traffic generator -> payments-api -> ledger -> PostgreSQL / queue
+   {"id":"40db9c0b-2522-4a3f-9f86-03e332bad1e6","merchant_id":"m_netpol","amount":1000,"currency":"USD","status":"captured","created_at":"2026-10-28T19:46:50.168777Z","updated_at":"2026-10-28T19:46:50.283479Z"}
+ ✔ payment captured: payments-api -> ledger and both data stores are reachable where allowed
+   traffic generator errors in the last 60s: 0
+==> policies in force
+NAME                   POD-SELECTOR                          AGE
+allow-dns              <none>                                9m38s
+allow-metrics-scrape   app.kubernetes.io/part-of=fincore     9m38s
+allow-tracing-egress   app.kubernetes.io/part-of=fincore     9m38s
+db-init-egress         app.kubernetes.io/name=db-init        9m38s
+default-deny           <none>                                9m38s
+ledger-egress          app.kubernetes.io/name=ledger         9m38s
+ledger-ingress         app.kubernetes.io/name=ledger         9m38s
+payments-api-egress    app.kubernetes.io/name=payments-api   9m38s
+payments-api-ingress   app.kubernetes.io/name=payments-api   9m38s
+
+ ✔ DEMO PASSED: the cardholder-data zone is isolated by default-deny NetworkPolicies

@@ -110,17 +110,26 @@ func (h *Handler) invariants(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"balanced": balanced, "imbalance_by_currency": m})
 }
 
-// WatchInvariants refreshes the imbalance gauge until ctx is cancelled.
+// WatchInvariants refreshes the imbalance gauge until ctx is cancelled. The
+// check reads every entry, so it runs once per interval across all replicas
+// (Store.ClaimCheck): each instance asks every few seconds, one of them runs
+// it. Each committed transaction is already balanced by database constraints;
+// this is the independent, ledger-wide check on top.
 func WatchInvariants(ctx context.Context, store *Store, every time.Duration) {
-	t := time.NewTicker(every)
+	t := time.NewTicker(every / 4)
 	defer t.Stop()
 	for {
-		m, err := store.Imbalance(ctx)
-		if err != nil {
+		run, err := store.ClaimCheck(ctx, "imbalance", every)
+		var m map[string]int64
+		if err == nil && run {
+			m, err = store.Imbalance(ctx)
+		}
+		switch {
+		case err != nil:
 			if ctx.Err() == nil {
 				slog.Warn("refresh imbalance gauge", "error", err)
 			}
-		} else {
+		case run:
 			for ccy, v := range m {
 				imbalance.WithLabelValues(ccy).Set(float64(v))
 				if v != 0 {

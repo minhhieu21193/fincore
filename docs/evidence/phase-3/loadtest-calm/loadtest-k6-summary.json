@@ -1,0 +1,50 @@
+{
+  "steps": [
+    10,
+    20,
+    30,
+    40,
+    60,
+    90
+  ],
+  "hold": "2m",
+  "iterations": {
+    "count": 30312,
+    "rate": 35.66072416133245
+  },
+  "dropped_iterations": {
+    "count": 4247,
+    "rate": 4.996407215399146
+  },
+  "http_reqs": {
+    "count": 30312,
+    "rate": 35.66072416133245
+  },
+  "server_errors": {
+    "fails": 28231,
+    "rate": 0.06865267880707311,
+    "passes": 2081
+  },
+  "captured": {
+    "rate": 0.910266561097915,
+    "passes": 27592,
+    "fails": 2720
+  },
+  "payment_latency_ms": {
+    "p(95)": 7528.674466049989,
+    "p(99)": 9989.320508370001,
+    "max": 10456.29138,
+    "avg": 1127.518119729611,
+    "min": 43.9965,
+    "med": 137.743167
+  },
+  "vus_max": {
+    "max": 300,
+    "value": 300,
+    "min": 90
+  },
+  "thresholds_passed": {
+    "server_errors": false,
+    "http_req_duration{expected_response:true}": false
+  }
+}

@@ -6,6 +6,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -168,6 +169,20 @@ func (s *Store) Balance(ctx context.Context, code string) (Balance, error) {
 	}
 	b.Balance = NormalBalance(b.Type, b.Debits, b.Credits)
 	return b, nil
+}
+
+// ClaimCheck reports whether this instance should run the named fleet-wide
+// check now. It atomically moves the check's last run forward when that run is
+// at least every old, so across all replicas the check runs about once per
+// interval, whatever the replica count.
+func (s *Store) ClaimCheck(ctx context.Context, name string, every time.Duration) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE invariant_checks SET checked_at = now()
+		WHERE name = $1 AND checked_at <= now() - make_interval(secs => $2)`, name, every.Seconds())
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // Imbalance returns sum(debits) - sum(credits) per currency across the whole

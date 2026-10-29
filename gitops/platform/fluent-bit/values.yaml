@@ -1,0 +1,60 @@
+# Fluent Bit: one small agent per node, tailing container logs into Loki.
+# Labels are kept low-cardinality (namespace, app, container, pod); the log
+# line itself is the service's JSON, unchanged, so Grafana can extract
+# trace_id from it and link to Tempo.
+#
+# CDE nodes: the DaemonSet tolerates the CDE taint so the zone's logs are
+# collected too. It runs in "monitoring", the documented exception of the
+# no-cde-tolerations-outside-zone admission policy. Card numbers never reach
+# FinCore: payments-api accepts a processor token, never stores it in clear
+# and never logs it.
+tolerations:
+  - key: fincore.io/zone
+    operator: Equal
+    value: cde
+    effect: NoSchedule
+resources:
+  requests: { cpu: 10m, memory: 24Mi }
+  limits: { memory: 96Mi }
+# Prometheus scrapes Fluent Bit's own metrics (dropped records, retries).
+serviceMonitor:
+  enabled: true
+config:
+  # Path: every container on AWS; environments may narrow it.
+  inputs: |
+    [INPUT]
+        Name tail
+        Path {{ .Values.fincore.logPath }}
+        multiline.parser cri, docker
+        Tag kube.*
+        Mem_Buf_Limit 5MB
+        Skip_Long_Lines On
+        Refresh_Interval 10
+
+  filters: |
+    [FILTER]
+        Name kubernetes
+        Match kube.*
+        Merge_Log Off
+        Keep_Log On
+        Labels On
+        Annotations Off
+        K8S-Logging.Exclude On
+
+  outputs: |
+    [OUTPUT]
+        Name loki
+        Match kube.*
+        Host {{ .Values.fincore.lokiHost }}
+        Port 3100
+        labels job=fluent-bit, namespace=$kubernetes['namespace_name'], pod=$kubernetes['pod_name'], container=$kubernetes['container_name'], app=$kubernetes['labels']['app.kubernetes.io/name']
+        remove_keys kubernetes, stream, _p, time
+        drop_single_key raw
+        line_format key_value
+        Retry_Limit 5
+# Values used by the configuration templates above.
+fincore:
+  logPath: /var/log/containers/*.log
+  lokiHost: loki.monitoring.svc.cluster.local
+testFramework:
+  enabled: false

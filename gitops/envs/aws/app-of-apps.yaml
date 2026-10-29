@@ -50,6 +50,33 @@ components:
   external-secrets: { enabled: true }
   prometheus-operator-crds: { enabled: true }
   kube-prometheus-stack: { enabled: true }
+  # Backups go to the backup bucket through Pod Identity (no keys).
+  velero:
+    enabled: true
+    clusterValues: |
+      credentials:
+        useSecret: false
+      configuration:
+        backupStorageLocation:
+          - name: default
+            provider: aws
+            bucket: {{ .Values.cluster.backupBucket }}
+            prefix: velero
+            default: true
+            config:
+              region: {{ .Values.cluster.region }}
+  backups:
+    enabled: true
+    clusterValues: |
+      uploader: aws-cli
+      bucket: {{ .Values.cluster.backupBucket }}
+      region: {{ .Values.cluster.region }}
+  loki: { enabled: true }
+  tempo: { enabled: true }
+  fluent-bit: { enabled: true }
+  dashboards: { enabled: true }
+  slo: { enabled: true }
+  opencost: { enabled: true }
   aws-load-balancer-controller:
     enabled: true
     clusterValues: |

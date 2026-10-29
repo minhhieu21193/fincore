@@ -7,3 +7,13 @@ prometheus:
   prometheusSpec:
     scrapeInterval: 30s
     evaluationInterval: 30s
+grafana:
+  # kind: reached through a port-forward only, so read-only anonymous access
+  # is enough for the demo. AWS keeps login-only access.
+  grafana.ini:
+    auth.anonymous:
+      enabled: true
+      org_role: Viewer
+  # The chart's default Kubernetes dashboards need the default recording
+  # rules, which are off on kind; FinCore's own dashboards cover the platform.
+  defaultDashboardsEnabled: false

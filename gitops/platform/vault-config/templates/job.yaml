@@ -64,6 +64,7 @@ spec:
               - { key: sql.create.sql, path: sql/create.sql }
               - { key: sql.revoke.sql, path: sql/revoke.sql }
               - { key: policy.vault-configurer.hcl, path: policies/vault-configurer.hcl }
+              - { key: policy.vault-snapshot.hcl, path: policies/vault-snapshot.hcl }
               {{- range $roles }}
               - { key: policy.{{ . }}-db.hcl, path: policies/{{ . }}-db.hcl }
               - { key: role.{{ . }}, path: roles/{{ . }} }

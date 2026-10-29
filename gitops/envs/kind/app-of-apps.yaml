@@ -12,6 +12,14 @@ components:
   external-secrets: { enabled: true }
   prometheus-operator-crds: { enabled: true }
   kube-prometheus-stack: { enabled: true }
+  loki: { enabled: true }
+  tempo: { enabled: true }
+  fluent-bit: { enabled: true }
+  dashboards: { enabled: true }
+  slo: { enabled: true }
+  opencost: { enabled: true }
+  velero: { enabled: true }
+  backups: { enabled: true }
   kyverno: { enabled: true }
   local-kms: { enabled: true }
   policies: { enabled: true }

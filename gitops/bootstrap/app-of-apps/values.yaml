@@ -10,6 +10,9 @@
 #   clusterValues:  template rendered against these values into helm valuesObject
 #                   (used for account-specific values that never live in git)
 #   wave:           Argo CD sync wave (lower first)
+#   afterRestore:   held back while restoreHold is true: it needs data that a
+#                   disaster recovery restores first (scripts/kind-up.sh --restore)
+#   restoreValues:  extra values while restoreHold is true
 
 # -- Git repository Argo CD reads. Set per environment.
 repoURL: ""
@@ -17,10 +20,29 @@ targetRevision: HEAD
 # -- Environment name: kind | aws
 env: ""
 
+# -- Set by kind-up.sh --restore until secrets and data are restored.
+restoreHold: false
+
 # -- Cluster facts injected at bootstrap time (Terraform outputs on AWS). Never committed.
 cluster: {}
 
 components:
+  # Velero first: in a disaster recovery it restores the secrets everything
+  # else needs (the KMS key on kind) before the next wave starts.
+  velero:
+    enabled: false
+    wave: -12
+    namespace: velero
+    serverSideApply: true   # CRDs exceed the client-side last-applied annotation limit
+    chart: { repo: https://vmware-tanzu.github.io/helm-charts, name: velero, version: 12.2.1 }
+    valueFiles: [platform/velero/values.yaml]
+    # No scheduled backup while a restore is in progress: it would capture a
+    # half-restored cluster and become the "newest" backup.
+    restoreValues: |
+      schedules:
+        cluster-state:
+          disabled: true
+
   # ---------------------------------------------------------------- wave 0: controllers and CRDs
   argo-rollouts:
     enabled: false
@@ -68,6 +90,18 @@ components:
     serverSideApply: true
     chart: { repo: https://prometheus-community.github.io/helm-charts, name: kube-prometheus-stack, version: 92.13.1 }
     valueFiles: [platform/kube-prometheus-stack/values.yaml]
+    # The operator's admission webhooks get their CA bundle from the chart's
+    # patch Job at runtime. Without this, every sync re-ran the Job, the bundle
+    # changed, Argo CD saw drift and synced again (a loop of CRD and webhook
+    # applies that kept the API server busy).
+    ignoreDifferences:
+      - group: admissionregistration.k8s.io
+        kind: ValidatingWebhookConfiguration
+        jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+      - group: admissionregistration.k8s.io
+        kind: MutatingWebhookConfiguration
+        jqPathExpressions: [".webhooks[]?.clientConfig.caBundle"]
+    syncOptions: [RespectIgnoreDifferences=true]
 
   kyverno:
     enabled: false
@@ -135,6 +169,60 @@ components:
     namespace: cert-manager
     path: platform/cluster-issuers
 
+  # Observability: logs (Fluent Bit -> Loki), traces (services -> Tempo) and
+  # Grafana dashboards (top-level dashboards/ chart, picked up by Grafana's
+  # sidecar). Grafana and Alertmanager come with kube-prometheus-stack.
+  loki:
+    enabled: false
+    wave: -5
+    namespace: monitoring
+    chart: { repo: ghcr.io/grafana-community/helm-charts, name: loki, version: 20.0.1 }
+    valueFiles: [platform/loki/values.yaml]
+
+  tempo:
+    enabled: false
+    wave: -5
+    namespace: monitoring
+    chart: { repo: ghcr.io/grafana-community/helm-charts, name: tempo, version: 3.2.1 }
+    valueFiles: [platform/tempo/values.yaml]
+
+  fluent-bit:
+    enabled: false
+    wave: -5
+    namespace: monitoring
+    chart: { repo: https://fluent.github.io/helm-charts, name: fluent-bit, version: 0.58.3 }
+    valueFiles: [platform/fluent-bit/values.yaml]
+
+  dashboards:
+    enabled: false
+    wave: -5
+    namespace: monitoring
+    repoPath: dashboards
+
+  # Scheduled backups to the object store: Vault Raft snapshots everywhere,
+  # PostgreSQL dumps on kind (Aurora backs itself up on AWS).
+  backups:
+    enabled: false
+    wave: 6
+    afterRestore: true
+    namespace: vault
+    path: platform/backups
+
+  # Cost per namespace, workload and node (docs/cost.md).
+  opencost:
+    enabled: false
+    wave: -5
+    namespace: opencost
+    chart: { repo: https://opencost.github.io/opencost-helm-chart, name: opencost, version: 2.5.33 }
+    valueFiles: [platform/opencost/values.yaml]
+
+  # SLO recording rules and burn-rate alerts (Alertmanager routes them).
+  slo:
+    enabled: false
+    wave: -5
+    namespace: monitoring
+    path: platform/slo
+
   # Kyverno admission policies (top-level policies/ chart).
   policies:
     enabled: false
@@ -157,6 +245,13 @@ components:
     namespace: vault
     chart: { repo: https://helm.releases.hashicorp.com, name: vault, version: 0.34.1 }
     valueFiles: [platform/vault/values.yaml]
+    # A restore loads the Raft snapshot into a single node; the other two
+    # start when the hold is released and join the restored cluster. (Followers
+    # that joined during the restore kept the temporary cluster's TLS identity.)
+    restoreValues: |
+      server:
+        ha:
+          replicas: 1
     # The injector rotates its webhook CA bundle at runtime.
     ignoreDifferences:
       - group: admissionregistration.k8s.io
@@ -176,6 +271,7 @@ components:
   # Namespace "fincore": services outside the cardholder-data zone.
   fincore-base:
     enabled: false
+    afterRestore: true
     wave: 5
     namespace: fincore
     path: apps/fincore-base
@@ -188,6 +284,7 @@ components:
   # Namespace "fincore-cde": the cardholder-data zone (payments-api, ledger, db-init).
   cde-base:
     enabled: false
+    afterRestore: true
     wave: 5
     namespace: fincore-cde
     path: apps/fincore-base
@@ -202,12 +299,14 @@ components:
   # created the roles Vault manages, before the ledger asks for credentials.
   vault-config:
     enabled: false
+    afterRestore: true
     wave: 6
     namespace: vault
     path: platform/vault-config
 
   ledger:
     enabled: false
+    afterRestore: true
     wave: 10
     namespace: fincore-cde
     path: charts/fincore-service
@@ -215,6 +314,7 @@ components:
 
   webhook-sink:
     enabled: false
+    afterRestore: true
     wave: 10
     namespace: fincore
     path: charts/fincore-service
@@ -222,6 +322,7 @@ components:
 
   payments-api:
     enabled: false
+    afterRestore: true
     wave: 15
     namespace: fincore-cde
     path: charts/fincore-service
@@ -229,6 +330,7 @@ components:
 
   notifier:
     enabled: false
+    afterRestore: true
     wave: 15
     namespace: fincore
     path: charts/fincore-service
@@ -236,6 +338,7 @@ components:
 
   traffic-generator:
     enabled: false
+    afterRestore: true
     wave: 20
     namespace: fincore
     path: apps/traffic-generator

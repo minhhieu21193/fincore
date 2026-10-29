@@ -108,6 +108,14 @@ spec:
               fieldPath: metadata.name
         - name: OTEL_RESOURCE_ATTRIBUTES
           value: "k8s.pod.name=$(POD_NAME),k8s.namespace.name={{ .Release.Namespace }}"
+        {{- with .Values.tracing.endpoint }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ . | quote }}
+        - name: OTEL_TRACES_SAMPLER
+          value: parentbased_traceidratio
+        - name: OTEL_TRACES_SAMPLER_ARG
+          value: {{ $.Values.tracing.sampleRatio | quote }}
+        {{- end }}
         {{- range $name, $value := .Values.env }}
         - name: {{ $name }}
           value: {{ $value | toString | quote }}

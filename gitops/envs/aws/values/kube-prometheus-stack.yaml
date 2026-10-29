@@ -1,0 +1,25 @@
+# AWS: metrics survive pod restarts (encrypted gp3), kept 15 days; the SLO
+# windows go up to 3 days. Alertmanager keeps silences and notification state.
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    retentionSize: 45GB
+    resources:
+      requests: { cpu: 250m, memory: 1Gi }
+      limits: { memory: 3Gi }
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3-encrypted
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests: { storage: 50Gi }
+alertmanager:
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3-encrypted
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests: { storage: 2Gi }

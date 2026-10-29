@@ -85,3 +85,8 @@ variable "ecr_repository_arns" {
   description = "ECR repositories whose signatures and attestations Kyverno verifies."
   type        = list(string)
 }
+
+variable "backup_bucket_arn" {
+  description = "Backup bucket (Velero cluster state, Vault Raft snapshots)."
+  type        = string
+}

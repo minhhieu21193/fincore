@@ -1,0 +1,30 @@
+# Every backup is written under <prefix>/<UTC time the backup started>.<ext>,
+# so the newest one is the last key in order and its name is the age of its
+# data. RPO <= schedule interval.
+schedule: "*/15 * * * *"
+bucket: fincore-backups
+
+# How the object is uploaded:
+#   s3-static  curl with SigV4 and static keys from the backup-s3 Secret (kind)
+#   aws-cli    the AWS CLI with Pod Identity credentials (AWS)
+uploader: s3-static
+endpoint: http://fincore-s3:8333
+region: us-east-1
+images:
+  vault: hashicorp/vault:2.2.1@sha256:962a92876e168d68eaaa24b0b8b49bbce1cb63024060a67bba95cd158a366fc2
+  postgres: postgres:17.11-alpine3.23@sha256:01ea903aa65deb58eb49d6e09d859ecff63a6bb7d61feca55f2abad71d08f72a
+  curl: curlimages/curl:8.23.0@sha256:11e64e28c5f58c8d93ee95fcf22ac055f48b0bc440e0ce7d8013bbb5ad6aa8ac
+  awsCli: amazon/aws-cli:2.39.0@sha256:6014c77975a4ae237395924cc821333f20bf87c91964a45dd4ed5f3b13b424f5
+
+vault:
+  enabled: true
+  addr: https://vault-active.vault.svc:8200
+  namespace: vault
+
+# kind only: on AWS, Aurora's automated backups and point-in-time recovery
+# cover the database (terraform/modules/aurora).
+postgres:
+  enabled: false
+  namespace: fincore-data
+  host: postgres.fincore-data.svc.cluster.local
+  adminSecret: postgres-admin

@@ -84,8 +84,24 @@ module "eks" {
   secrets_manager_arns       = concat(values(module.secrets.secret_arns), [module.aurora.master_user_secret_arn])
   payment_events_queue_arn   = module.queues.queue_arn
   vault_kms_key_arn          = module.vault_kms.key_arn
+  backup_bucket_arn          = module.backups.bucket_arn
   ecr_repository_arns        = values(module.ecr.repository_arns)
   tags                       = local.tags
+}
+
+module "backups" {
+  source      = "../../modules/backups"
+  name        = local.name
+  kms_key_arn = module.kms.key_arn
+  tags        = local.tags
+}
+
+module "chaos" {
+  source      = "../../modules/chaos"
+  name        = local.name
+  zone        = module.network.azs[0]
+  subnet_arns = [module.network.private_subnet_arns[0], module.network.database_subnet_arns[0]]
+  tags        = local.tags
 }
 
 module "aurora" {

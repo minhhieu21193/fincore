@@ -1,0 +1,23 @@
+# kind: no cloud price list, so every node is priced as the AWS node type it
+# stands for, m7g.large (2 vCPU, 8 GiB) in ap-southeast-1, from the AWS public
+# price list (docs/cost/prices-ap-southeast-1.json, published 2026-10-27;
+# Spot from the public Spot price feed, 2026-10-28):
+#   on-demand $0.102/h, Spot $0.0544/h, gp3 $0.096 per GB-month.
+# OpenCost wants hourly prices per vCPU and per GiB. The node price is split
+# in the ratio of OpenCost's own defaults (1 vCPU = 7.46 GiB), so that
+# 2 x CPU + 8 x RAM = the node's hourly price. Storage is per GiB-hour.
+opencost:
+  customPricing:
+    enabled: true
+    provider: custom
+    costModel:
+      description: kind priced as AWS m7g.large, ap-southeast-1 (AWS public price list, 2026-10-27)
+      CPU: 0.033200
+      spotCPU: 0.017707
+      RAM: 0.004450
+      spotRAM: 0.002373
+      GPU: 0
+      storage: 0.00013151
+      zoneNetworkEgress: 0
+      regionNetworkEgress: 0
+      internetNetworkEgress: 0

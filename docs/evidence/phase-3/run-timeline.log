@@ -1,0 +1,35 @@
+19:22:47 START kind-down
+19:22:52 END kind-down rc=0 5s
+19:22:52 START kind-up
+19:40:41 END kind-up rc=0 1069s
+19:45:41 START e2e
+19:45:47 END e2e rc=0 6s
+19:45:47 START netpol
+19:46:50 END netpol rc=0 63s
+19:46:50 START policies
+19:47:18 END policies rc=0 28s
+19:47:18 START rotation
+19:50:26 END rotation rc=0 188s
+19:50:27 START demo-good-release
+19:55:04 END demo-good-release rc=0 277s
+19:55:04 START demo-bad-release
+19:59:06 END demo-bad-release rc=0 242s
+19:59:07 START observability
+19:59:28 END observability rc=0 21s
+screenshot docs/evidence/phase-3/grafana-business.png failed
+screenshot docs/evidence/phase-3/grafana-red-payments-api.png failed
+screenshot docs/evidence/phase-3/grafana-platform.png failed
+20:05:18 START chaos
+21:20:07 END chaos rc=0 4489s
+screenshot docs/evidence/phase-3/grafana-slo-chaos.png failed
+screenshot docs/evidence/phase-3/grafana-business-chaos.png failed
+21:26:02 START loadtest
+21:45:48 END loadtest rc=0 1186s
+screenshot docs/evidence/phase-3/grafana-red-loadtest.png failed
+screenshot docs/evidence/phase-3/grafana-platform-loadtest.png failed
+21:51:48 opencost 200
+21:51:48 START dr-drill
+22:11:54 END dr-drill rc=0 1206s
+22:11:54 START check
+22:13:22 END check rc=0 88s
+22:13:22 DONE

@@ -1,8 +1,74 @@
 # Architecture
 
-This document grows with each phase. Phase 2 adds the cardholder-data zone,
-the credential flow and the admission path. The network, GitOps and
-observability views arrive with Phase 3 and the final docs.
+How FinCore is built, from the network down to a single payment. Each view
+links to the code that implements it; the reasons behind the main choices are
+in [`docs/adr/`](adr/README.md).
+
+- [Network (AWS)](#network-aws)
+- [Cluster: namespaces and node pools](#cluster-namespaces-and-node-pools)
+- [Cardholder-data zone (CDE) boundary](#cardholder-data-zone-cde-boundary)
+- [Payment flow](#payment-flow)
+- [GitOps and release flow](#gitops-and-release-flow)
+- [Database credentials](#database-credentials-no-static-password-for-the-ledger)
+- [Admission path](#admission-path-what-may-run-in-fincore-namespaces)
+- [Observability](#observability)
+- [Backups and restore](#backups-and-restore)
+
+## Network (AWS)
+
+One VPC (10.40.0.0/16) over three availability zones of ap-southeast-1
+([`terraform/modules/network`](../terraform/modules/network/main.tf)). Nodes
+and pods live in private subnets; only the ALB and the NAT gateway are public.
+AWS APIs the services call (ECR, STS, SQS, Secrets Manager) are reached
+through interface endpoints, S3 through a gateway endpoint, so that traffic
+never crosses the internet.
+
+```mermaid
+flowchart TB
+  internet([Internet])
+  subgraph vpc["VPC 10.40.0.0/16 · 3 AZs"]
+    subgraph public["Public subnets /24 ×3"]
+      waf[AWS WAF] --- alb[ALB · TLS]
+      nat[NAT gateway]
+    end
+    subgraph private["Private subnets /20 ×3"]
+      eks[EKS nodes and pods]
+      vpce[Interface endpoints<br/>ECR · STS · SQS · Secrets Manager]
+    end
+    subgraph db["Database subnets /24 ×3"]
+      aurora[(Aurora PostgreSQL<br/>writer + reader, 2 AZs)]
+    end
+    s3gw[S3 gateway endpoint]
+  end
+  sqs[(SQS + DLQ)]
+  kms[KMS]
+  internet --> waf
+  alb --> eks
+  eks --> aurora
+  eks --> vpce --> sqs
+  eks --> s3gw
+  eks -->|Vault auto-unseal, webhooks out| nat --> internet
+  nat -.-> kms
+```
+
+Security groups mirror the NetworkPolicies: Aurora admits only the CDE nodes'
+security group (attached by the CDE NodePool, [ADR 0001](adr/0001-karpenter-over-cluster-autoscaler.md))
+and the system nodes', where Vault runs.
+
+## Cluster: namespaces and node pools
+
+| Namespace | What runs there | Nodes |
+|---|---|---|
+| `fincore-cde` | payments-api, ledger (Vault Agent sidecar), db-init | CDE NodePool: tainted, on-demand, one per AZ |
+| `fincore` | notifier, webhook-sink (demo merchant), traffic generator | General NodePool (Spot first) |
+| `vault` | Vault (3 nodes, Raft), injector, snapshot job | AWS: system node group, one per AZ (Aurora admits these nodes); kind: general |
+| `monitoring` | Prometheus, Alertmanager, Grafana, Loki, Tempo, Fluent Bit (every node) | General (Fluent Bit also on CDE nodes) |
+| `argocd`, `argo-rollouts`, `kyverno`, `cert-manager`, `external-secrets`, `velero`, `opencost` | Platform controllers | General |
+| `kube-system` | Karpenter, CoreDNS, AWS Load Balancer Controller, EBS CSI | System node group (3 × m7g.large, managed) |
+| `fincore-data` (kind only) | PostgreSQL and ElasticMQ, the stand-ins for Aurora and SQS | kind workers |
+
+On kind the same layout runs on four containers: a control plane, two
+general workers labelled zones a and b, and one tainted CDE worker in zone c.
 
 ## Cardholder-data zone (CDE) boundary
 
@@ -81,6 +147,62 @@ On AWS the same boundary also holds one layer down. Aurora's security group
 admits only the CDE node security group and the system node security group
 (Vault). Karpenter's ordinary workload nodes don't carry either group.
 
+## Payment flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant A as payments-api
+  participant P as Card processor
+  participant L as ledger
+  participant DB as PostgreSQL (payments)
+  participant Q as SQS
+  participant N as notifier
+  participant M as Merchant
+  C->>A: POST /v1/payments (Idempotency-Key)
+  A->>DB: claim key (or replay the stored answer)
+  A->>P: authorize
+  A->>DB: status authorized
+  A->>P: capture
+  A->>L: POST /v1/transactions (balanced: debit receivable, credit merchant and fees)
+  L-->>A: 201 (or the same transaction again: idempotent on payment id)
+  A->>DB: status captured + outbox event, one transaction
+  A-->>C: 201 captured
+  loop relay (every replica, SKIP LOCKED)
+    A->>DB: unpublished events
+    A->>Q: SendMessageBatch
+    A->>DB: mark published
+  end
+  N->>Q: receive
+  N->>M: signed webhook (retries; DLQ after maxReceiveCount)
+```
+
+A retry with the same `Idempotency-Key` returns the stored answer byte for
+byte; a technical failure releases the key so the retry resumes from the
+payment's current state. The ledger's database rejects any transaction whose
+entries do not balance, and entries can never be updated or deleted.
+
+## GitOps and release flow
+
+```mermaid
+flowchart LR
+  dev[Commit] --> ci[CI: tests, lint, policies, render + kubeconform]
+  ci --> rel[Release: build, SBOM, cosign keyless sign + attest]
+  rel --> ecr[(ECR)]
+  rel --> bump[Image tag bumped in gitops/envs]
+  bump --> argo[Argo CD: app-of-apps, sync waves]
+  argo --> rollout[Argo Rollouts canary<br/>10 → 30 → 60 → 100 %]
+  prom[(Prometheus)] -->|success rate ≥ 99 %, p95 ≤ 300 ms| rollout
+  rollout -->|analysis fails| abort[Abort: 100 % back to stable]
+  kyv[Kyverno admission:<br/>signed + SBOM, digest-pinned,<br/>non-root, limits, zone rules] -.-> rollout
+  ecr -.-> kyv
+```
+
+On kind, `scripts/deploy-kind.sh` plays CI's part (build, sign with a local
+key, push to the local registry, commit the tag) and an in-cluster git server
+serves this repository to Argo CD.
+
 ## Database credentials: no static password for the ledger
 
 ```mermaid
@@ -124,3 +246,42 @@ flowchart LR
   val -->|signature + SBOM verified,<br/>registry, non-root, read-only FS,<br/>limits, CDE placement| psa[Pod Security restricted] --> run([pod runs])
   val -->|any violation| deny([rejected with the reason])
 ```
+
+## Observability
+
+```mermaid
+flowchart LR
+  subgraph svc[FinCore services]
+    m[/metrics/] 
+    lg[JSON logs with trace_id]
+    tr[OTLP spans]
+  end
+  m --> prom[(Prometheus)]
+  lg --> fb[Fluent Bit] --> loki[(Loki)]
+  tr --> tempo[(Tempo)]
+  prom --> rules[SLO recording rules<br/>burn-rate alerts] --> am[Alertmanager<br/>page / ticket]
+  prom --> graf[Grafana]
+  loki --> graf
+  tempo --> graf
+  prom --> oc[OpenCost]
+```
+
+Grafana's data sources link both ways: a log line's `trace_id` opens the
+trace, a span opens its service's log lines. Dashboards (business, service
+RED, SLOs, platform) are generated from `dashboards/generate.py`. Spans leave
+the CDE through one more explicit NetworkPolicy; they carry ids, routes,
+status codes and timings, never card data.
+
+## Backups and restore
+
+| What | How | Where | Every |
+|---|---|---|---|
+| Secrets not in git (kind: emulated Secrets Manager, KMS seed) | Velero | Backup bucket (kind: SeaweedFS outside the cluster) | 15 min |
+| Vault | Raft snapshot, snapshot-only Kubernetes-auth role | Backup bucket | 15 min |
+| PostgreSQL | AWS: Aurora continuous backups (PITR, 7 days); kind: `pg_dumpall` | AWS: Aurora; kind: backup store | AWS: continuous; kind: 15 min |
+
+`scripts/kind-up.sh --restore` rebuilds a cluster from the store: Argo CD
+holds back everything that needs restored data, Velero restores the secrets,
+Vault gets its snapshot (same KMS key, so it unseals with its original
+keyring), PostgreSQL gets its dump, and the hold is released. The drill and
+its RTO/RPO: [`docs/evidence/phase-3/dr-drill.md`](evidence/phase-3/dr-drill.md).

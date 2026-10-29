@@ -7,6 +7,8 @@ data:
     {{- .Files.Get "files/configure.sh" | nindent 4 }}
   policy.vault-configurer.hcl: |
     {{- .Files.Get "files/policies/vault-configurer.hcl" | nindent 4 }}
+  policy.vault-snapshot.hcl: |
+    {{- .Files.Get "files/policies/vault-snapshot.hcl" | nindent 4 }}
   sql.create.sql: |
     {{- .Files.Get "files/sql/create.sql" | nindent 4 }}
   sql.revoke.sql: |

@@ -30,3 +30,8 @@ ok "committed: $msg ($(git -C "$ROOT" rev-parse --short HEAD))"
 
 # Ask Argo CD to look now instead of waiting for the next poll.
 kubectl -n argocd annotate application "$IMAGE" argocd.argoproj.io/refresh=normal --overwrite >/dev/null
+# Return only once the new tag is applied: the next release's "one canary at a
+# time" check must see this canary, not the state before Argo CD synced.
+wait_for "Argo CD to apply $IMAGE:$TAG" 300 bash -c \
+  "kubectl -n $(ns_of "$IMAGE") get rollouts.argoproj.io,deployments -o json | jq -e --arg t ':$TAG' '[.items[] | select(.metadata.name == \"$IMAGE\") | .spec.template.spec.containers[].image | select(contains(\$t))] | length > 0' >/dev/null"
+ok "Argo CD applied $IMAGE:$TAG"

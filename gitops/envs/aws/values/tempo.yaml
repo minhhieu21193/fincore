@@ -1,0 +1,3 @@
+# AWS: traces on an encrypted gp3 volume (7-day retention); see loki.yaml.
+persistence:
+  storageClassName: gp3-encrypted

@@ -3,7 +3,7 @@
 #
 #   scripts/check.sh            # everything
 #   scripts/check.sh --go       # go vet, go test, golangci-lint
-#   scripts/check.sh --static   # terraform, checkov, helm, kubeconform, kyverno test, actionlint, shellcheck
+#   scripts/check.sh --static   # terraform, checkov, helm, kubeconform, kyverno test, promtool, actionlint, shellcheck
 #
 # Go tests that need PostgreSQL run when TEST_DATABASE_URL is set
 # (make test-db starts one in docker).
@@ -64,6 +64,10 @@ helm_lint() {
   "${lint[@]}" gitops/platform/cluster-issuers &&
   "${lint[@]}" gitops/platform/karpenter-nodepools --set clusterName=lint --set nodeRole=lint &&
   "${lint[@]}" policies &&
+  "${lint[@]}" dashboards &&
+  "${lint[@]}" gitops/platform/slo &&
+  "${lint[@]}" gitops/platform/backups -f gitops/envs/kind/values/backups.yaml &&
+  "${lint[@]}" gitops/platform/backups --set uploader=aws-cli &&
   "${lint[@]}" policies --set signature.mode=keyless &&
   "${lint[@]}" gitops/apps/fincore-base -f gitops/apps/cde-base/values.yaml &&
   "${lint[@]}" gitops/bootstrap/app-of-apps -f gitops/envs/kind/app-of-apps.yaml &&
@@ -77,6 +81,11 @@ kubeconform_envs() {
     scripts/render.sh "$env" "$out/$env" >/dev/null || return 1
   done
   scripts/ci/crd-schemas.sh "$out/kind" "$out/aws" "$out/schemas" || return 1
+  # Security invariant: the Vault injector fails closed in every environment.
+  for env in kind aws; do
+    [[ "$(yq 'select(.kind == "MutatingWebhookConfiguration" and .metadata.name == "vault-agent-injector-cfg") | .webhooks[].failurePolicy' "$out/$env/vault.yaml")" == Fail ]] ||
+      { echo "vault injector webhook must have failurePolicy Fail ($env)"; return 1; }
+  done
   for env in kind aws; do
     kubeconform -strict -summary -kubernetes-version "$K8S_VERSION" \
       -schema-location default \
@@ -98,8 +107,16 @@ policy_tests() {
   rm -rf "$out"
 }
 
+# The committed dashboard JSON is exactly what dashboards/generate.py produces.
+dashboards_check() {
+  local out
+  out="$(mktemp -d)"
+  python3 dashboards/generate.py "$out" && diff -r dashboards/json "$out" || return 1
+  rm -rf "$out"
+}
+
 static_checks() {
-  need terraform tflint checkov helm yq jq kubeconform kyverno actionlint shellcheck
+  need terraform tflint checkov helm yq jq kubeconform kyverno actionlint shellcheck python3 promtool
   run "terraform fmt" terraform fmt -check -recursive terraform
   run "terraform validate" terraform_validate
   run "tflint" tflint_all
@@ -107,6 +124,9 @@ static_checks() {
   run "helm lint" helm_lint
   run "kubeconform (kind + aws, rendered as Argo CD would)" kubeconform_envs
   run "kyverno test (admission policies)" policy_tests
+  run "dashboards up to date" dashboards_check
+  run "promtool (SLO rules and alert tests)" bash -c \
+    "promtool check rules gitops/platform/slo/rules/*.yaml && promtool test rules gitops/platform/slo/tests/*.test.yaml"
   run "actionlint" actionlint
   run "shellcheck" shellcheck -x scripts/*.sh scripts/ci/*.sh
   run "shellcheck (in-cluster scripts)" shellcheck -s sh gitops/platform/vault-config/files/configure.sh

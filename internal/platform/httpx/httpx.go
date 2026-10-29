@@ -103,8 +103,17 @@ func Instrument(service string, mux *http.ServeMux) http.Handler {
 // Readiness reports whether the instance should receive traffic. It turns
 // false as soon as shutdown begins so the endpoint is removed from Services
 // before connections are drained.
+//
+// The dependency check (e.g. a database ping) gates only the first readiness:
+// a new instance gets traffic once it has reached its dependencies. After
+// that, readiness reflects the instance alone. A shared dependency that slows
+// down must not take every instance out of the Service at once: under load a
+// ping waiting for a pooled connection timed out, pods flapped NotReady and
+// the remaining ones collapsed (Phase 3 load test). Requests fail fast on
+// their own when a dependency is really down.
 type Readiness struct {
 	shuttingDown atomic.Bool
+	reached      atomic.Bool
 	check        func(context.Context) error
 }
 
@@ -123,13 +132,14 @@ func (rd *Readiness) Register(mux *http.ServeMux) {
 			WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "shutting_down"})
 			return
 		}
-		if rd.check != nil {
+		if rd.check != nil && !rd.reached.Load() {
 			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 			defer cancel()
 			if err := rd.check(ctx); err != nil {
 				WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready", "error": err.Error()})
 				return
 			}
+			rd.reached.Store(true)
 		}
 		WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})

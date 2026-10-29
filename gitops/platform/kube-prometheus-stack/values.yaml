@@ -1,13 +1,105 @@
-# Phase 1 uses Prometheus as the canary-analysis data source only.
-# Grafana, Alertmanager, Loki and Tempo are added in Phase 3.
+# Prometheus (canary analysis, SLOs), Alertmanager (SLO burn-rate alerts) and
+# Grafana (dashboards over Prometheus, Loki and Tempo).
 # CRDs come from the prometheus-operator-crds app (32.0.1 = operator v0.94.1,
 # the version this chart ships), one sync wave earlier.
 crds:
   enabled: false
 grafana:
-  enabled: false
+  enabled: true
+  # Dashboards and data sources are code (sidecar ConfigMaps); nothing is kept
+  # in Grafana's own database, so it needs no volume.
+  persistence:
+    enabled: false
+  testFramework:
+    enabled: false
+  grafana.ini:
+    analytics:
+      reporting_enabled: false
+      check_for_updates: false
+      check_for_plugin_updates: false
+    users:
+      default_theme: light
+  # 384 Mi was OOM-killed rendering the SLO dashboard over an hour of chaos data.
+  resources:
+    requests: { cpu: 25m, memory: 192Mi }
+    limits: { memory: 768Mi }
+  sidecar:
+    resources:
+      requests: { cpu: 5m, memory: 48Mi }
+      limits: { memory: 128Mi }
+    dashboards:
+      # File dashboards under the folder named by their grafana_folder annotation.
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+  # Logs -> traces: the trace_id field of a FinCore log line opens the trace.
+  # Traces -> logs: a span opens the log lines of its service with its trace_id.
+  # ($$ escapes Grafana's environment-variable expansion in provisioning files.)
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+      jsonData:
+        derivedFields:
+          - name: TraceID
+            matcherType: regex
+            matcherRegex: '"trace_id":"([0-9a-f]{32})"'
+            datasourceUid: tempo
+            url: "$${__value.raw}"
+            urlDisplayLabel: Open trace
+    - name: Tempo
+      uid: tempo
+      type: tempo
+      url: http://tempo.monitoring.svc.cluster.local:3200
+      jsonData:
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: -5m
+          spanEndTimeShift: 5m
+          filterByTraceID: true
+          tags:
+            - { key: service.name, value: app }
+        lokiSearch:
+          datasourceUid: loki
+        nodeGraph:
+          enabled: true
 alertmanager:
-  enabled: false
+  enabled: true
+  # Routing for the SLO alerts (gitops/platform/slo): severity=page interrupts
+  # someone, severity=ticket is handled in working hours. A firing page holds
+  # back the ticket of the same SLO. The receivers carry no integration in git:
+  # on a real deployment "page" gets the on-call tool and "ticket" the team
+  # channel, with their keys from Secrets Manager, never committed. The routing
+  # itself is visible in Alertmanager's API (each alert lists its receiver).
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      receiver: ticket
+      group_by: [alertname, slo, severity]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      routes:
+        - receiver: "null"
+          matchers: ['alertname =~ "Watchdog|InfoInhibitor"']
+        - receiver: page
+          matchers: ['severity = "page"']
+          repeat_interval: 1h
+    inhibit_rules:
+      - source_matchers: ['severity = "page"']
+        target_matchers: ['severity = "ticket"']
+        equal: [alertname, slo]
+    receivers:
+      - name: "null"
+      - name: page
+      - name: ticket
+  alertmanagerSpec:
+    retention: 120h
+    resources:
+      requests: { cpu: 5m, memory: 32Mi }
+      limits: { memory: 96Mi }
 # Managed control planes (EKS) and kind do not expose these.
 kubeEtcd: { enabled: false }
 kubeControllerManager: { enabled: false }

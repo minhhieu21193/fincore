@@ -4,6 +4,12 @@
 #   cardholder-data-zone worker in zone c) -> TLS registry -> signed images -> local
 #   "secrets" -> git server -> Argo CD -> root app-of-apps -> Vault init -> Healthy.
 # Safe to re-run. Never talks to AWS.
+#
+#   scripts/kind-up.sh             # create or update
+#   scripts/kind-up.sh --restore   # disaster recovery into a fresh cluster from the
+#                                  # backup store (scripts/dr-drill.sh): secrets
+#                                  # (Velero), then Vault and PostgreSQL data, then
+#                                  # everything that depends on them
 set -euo pipefail
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
@@ -15,6 +21,11 @@ ARGOCD_CHART_VERSION="10.11.1"
 GENERAL_ZONES=(a b)
 CDE_ZONES=(c)
 mkdir -p "$ROOT/.kube"
+RESTORE=false
+[[ "${1:-}" == --restore ]] && RESTORE=true
+if $RESTORE && kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
+  die "--restore recovers into a new cluster; '$CLUSTER' still exists (scripts/kind-down.sh first)"
+fi
 
 # ---------------------------------------------------------------- local PKI (generated once, never committed)
 log "local PKI in $PKI"
@@ -109,6 +120,27 @@ fi
 wait_for "registry" 30 curl -sf --cacert "$PKI/registry-ca.crt" "https://$REGISTRY_PUSH/v2/"
 ok "registry ready"
 
+# ---------------------------------------------------------------- backup store (stand-in for S3)
+log "backup store $S3_ENDPOINT (SeaweedFS, outside the cluster)"
+if [[ ! -f "$S3_CREDENTIALS" ]]; then
+  $RESTORE && die "no backup store credentials in $S3_CREDENTIALS: nothing to restore from"
+  printf 'S3_ACCESS_KEY=fincore%s\nS3_SECRET_KEY=%s\n' "$(openssl rand -hex 8)" "$(openssl rand -hex 24)" > "$S3_CREDENTIALS"
+  chmod 600 "$S3_CREDENTIALS"
+fi
+# shellcheck disable=SC1090
+source "$S3_CREDENTIALS"
+printf '{"identities":[{"name":"fincore-backup","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}\n' \
+  "$S3_ACCESS_KEY" "$S3_SECRET_KEY" > "$PKI/s3-identities.json"
+chmod 644 "$PKI/s3-identities.json"   # read by the store's container
+if [[ "$(docker inspect -f '{{.State.Running}}' "$S3_CONTAINER" 2>/dev/null)" != true ]]; then
+  docker rm -f "$S3_CONTAINER" >/dev/null 2>&1 || true
+  docker run -d --restart=always --name "$S3_CONTAINER" --network kind -p "127.0.0.1:${S3_HOST_ENDPOINT##*:}:8333" \
+    -v fincore-s3-data:/data -v "$PKI/s3-identities.json:/etc/seaweedfs/s3.json:ro" \
+    "$S3_IMAGE" mini -dir=/data -bucket="$S3_BUCKET" -s3.config=/etc/seaweedfs/s3.json -ip.bind=0.0.0.0 >/dev/null
+fi
+wait_for "backup store" 90 s3 -o /dev/null "?list-type=2&max-keys=1"
+ok "backup store ready (bucket $S3_BUCKET)"
+
 # Every node trusts the registry CA: containerd (pulls) and a CA bundle that
 # Kyverno mounts to fetch signatures (gitops/envs/kind/values/kyverno.yaml).
 log "node trust for $REGISTRY"
@@ -134,7 +166,11 @@ log "building, publishing and signing images"
 
 # ---------------------------------------------------------------- local secrets (stand-in for AWS Secrets Manager)
 log "local secrets (generated once, never committed)"
-kubectl create namespace secrets-emulator --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+for ns in secrets-emulator vault velero fincore-data; do
+  kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+done
+# Secrets labelled fincore.io/restore=early are what a restore brings back
+# first (Velero), before anything that uses them starts.
 ensure_secret() { # name key=value...
   local name="$1"; shift
   if ! kubectl -n secrets-emulator get secret "$name" >/dev/null 2>&1; then
@@ -143,22 +179,22 @@ ensure_secret() { # name key=value...
     kubectl -n secrets-emulator create secret generic "$name" "${args[@]}" >/dev/null
     ok "created secret $name"
   fi
+  kubectl -n secrets-emulator label --overwrite secret "$name" fincore.io/restore=early >/dev/null
 }
 rand() { openssl rand -hex 24; }
-ensure_secret fincore-db-admin username=postgres "password=$(rand)"
-ensure_secret fincore-payments-db "password=$(rand)"
-ensure_secret fincore-ledger-db "password=$(rand)"
-ensure_secret fincore-webhook-signing "secret=$(rand)"
-# Bootstrap password of Vault's database admin role; Vault rotates it on first use.
-ensure_secret fincore-vault-db-admin "password=$(rand)"
+if ! $RESTORE; then
+  ensure_secret fincore-db-admin username=postgres "password=$(rand)"
+  ensure_secret fincore-payments-db "password=$(rand)"
+  ensure_secret fincore-webhook-signing "secret=$(rand)"
+  # Bootstrap password of Vault's database admin role; Vault rotates it on first use.
+  ensure_secret fincore-vault-db-admin "password=$(rand)"
 
-# Seed of the local KMS emulator (kind's stand-in for the Vault unseal key in AWS KMS):
-# a random 256-bit key, generated once per cluster.
-kubectl create namespace vault --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-if ! kubectl -n vault get secret local-kms-seed >/dev/null 2>&1; then
-  seed="$(mktemp)"
-  key_id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
-  cat > "$seed" <<SEED
+  # Seed of the local KMS emulator (kind's stand-in for the Vault unseal key in AWS KMS):
+  # a random 256-bit key, generated once per cluster.
+  if ! kubectl -n vault get secret local-kms-seed >/dev/null 2>&1; then
+    seed="$(mktemp)"
+    key_id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+    cat > "$seed" <<SEED
 Keys:
   Symmetric:
     Aes:
@@ -171,10 +207,21 @@ Aliases:
   - AliasName: alias/fincore-vault-unseal
     TargetKeyId: $key_id
 SEED
-  kubectl -n vault create secret generic local-kms-seed --from-file=seed.yaml="$seed" >/dev/null
-  rm -f "$seed"
-  ok "created local KMS seed"
+    kubectl -n vault create secret generic local-kms-seed --from-file=seed.yaml="$seed" >/dev/null
+    rm -f "$seed"
+    ok "created local KMS seed"
+  fi
+  kubectl -n vault label --overwrite secret local-kms-seed fincore.io/restore=early >/dev/null
 fi
+
+# Backup store credentials for Velero and the backup jobs (on AWS: Pod Identity, no keys).
+kubectl -n velero create secret generic velero-s3 \
+  --from-literal=cloud="$(printf '[default]\naws_access_key_id=%s\naws_secret_access_key=%s\n' "$S3_ACCESS_KEY" "$S3_SECRET_KEY")" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+for ns in vault fincore-data; do
+  kubectl -n "$ns" create secret generic backup-s3 --from-literal=access_key="$S3_ACCESS_KEY" \
+    --from-literal=secret_key="$S3_SECRET_KEY" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+done
 
 # The public half of the local signing key, read by Kyverno's image verification policy.
 kubectl create namespace kyverno --dry-run=client -o yaml | kubectl apply -f - >/dev/null
@@ -190,8 +237,24 @@ ok "gitserver ready"
 
 # ---------------------------------------------------------------- Argo CD
 log "Argo CD (chart $ARGOCD_CHART_VERSION)"
-helm upgrade --install argocd argo-cd \
-  --repo https://argoproj.github.io/argo-helm --version "$ARGOCD_CHART_VERSION" \
+# The chart is fetched once into the pinned chart cache, then installed from
+# the local file: a restore must not depend on a chart repository being
+# reachable at that moment (a DR drill trial failed on a DNS outage).
+ARGOCD_TGZ="$ROOT/.tools/helm/charts/argo-cd-$ARGOCD_CHART_VERSION.tgz"
+if [[ ! -f "$ARGOCD_TGZ" ]]; then
+  mkdir -p "$(dirname "$ARGOCD_TGZ")"
+  for attempt in 1 2 3; do
+    helm pull argo-cd --repo https://argoproj.github.io/argo-helm --version "$ARGOCD_CHART_VERSION" \
+      -d "$(dirname "$ARGOCD_TGZ")" >/dev/null && break
+    (( attempt == 3 )) && die "could not download the Argo CD chart"
+    warn "Argo CD chart download failed (attempt $attempt), retrying in $(( attempt * 20 ))s"
+    sleep $(( attempt * 20 ))
+  done
+fi
+# Client-side apply: re-running kind-up on an existing cluster then sends only
+# what changed. Server-side apply resends the very large ApplicationSet CRD,
+# which the kind API server (2 CPUs) could not process within its timeout.
+helm upgrade --install argocd "$ARGOCD_TGZ" --server-side=false \
   --namespace argocd --create-namespace \
   -f "$ROOT/gitops/bootstrap/argocd/values.yaml" \
   -f "$ROOT/gitops/bootstrap/argocd/values-kind.yaml" \
@@ -217,9 +280,20 @@ spec:
     path: gitops/bootstrap/app-of-apps
     helm:
       valueFiles: [../../envs/kind/app-of-apps.yaml]
+      parameters:
+        - { name: restoreHold, value: "$RESTORE" }
   syncPolicy:
     automated: { prune: true, selfHeal: true }
 YAML
+
+# ---------------------------------------------------------------- restore (--restore only)
+# Argo CD holds back every component marked afterRestore (db-init, vault-config,
+# the services, the backup jobs) while restoreHold is true; the rest syncs in
+# its waves. Velero (first wave) brings back the secrets, then Vault and
+# PostgreSQL get their data, then the hold is released.
+if $RESTORE; then
+  "$ROOT/scripts/restore.sh"
+fi
 
 # ---------------------------------------------------------------- wait
 log "waiting for every application to be Synced and Healthy (first run: ~5-10 min)"
