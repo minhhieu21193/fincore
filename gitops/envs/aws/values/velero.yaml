@@ -5,6 +5,22 @@ schedules:
     schedule: "0 * * * *"
     template:
       ttl: 168h
-      includedNamespaces: [vault, fincore, fincore-cde, external-secrets, argocd]
+      includedNamespaces: [vault, fincore, external-secrets, argocd]
       includedResources: ["*"]
       excludedResources: [events, events.events.k8s.io]
+  # The cardholder-data zone without its Secrets, so the backup bucket holds no
+  # copy of a CDE credential. After a restore External Secrets recreates them
+  # from Secrets Manager (CDE key); the ledger's Vault-issued credentials are
+  # never Secrets (Vault Agent renders them into the pod). Runbook:
+  # docs/runbooks/disaster-recovery.md.
+  cde-without-secrets:
+    disabled: false
+    schedule: "5 * * * *"
+    useOwnerReferencesInBackup: false
+    template:
+      ttl: 168h
+      storageLocation: default
+      includedNamespaces: [fincore-cde]
+      includedResources: ["*"]
+      excludedResources: [secrets, events, events.events.k8s.io]
+      snapshotVolumes: false

@@ -21,7 +21,8 @@ data "aws_route53_zone" "this" {
 # One customer-managed key per data domain, so a grant on one never opens
 # another (docs/compliance-mapping.md):
 #   cde      cardholder-data zone data: the payment-events queue, Aurora
-#            (storage, logs, Performance Insights) and the secrets that open it
+#            (storage, logs, Performance Insights), the secrets that open it
+#            and the root volumes of the zone's nodes
 #   platform the cluster: EKS Secrets, EBS, ECR images, VPC/EKS/WAF logs
 #   backups  the backup bucket (Velero cluster state, Vault snapshots)
 #   vault    Vault auto-unseal (only with secrets_backend = "vault")
@@ -29,9 +30,10 @@ data "aws_route53_zone" "this" {
 module "cde_kms" {
   source      = "../../modules/kms"
   alias       = "${local.name}-cde"
-  description = "FinCore ${var.environment}: cardholder-data zone (SQS, Aurora, its secrets)"
-  # Usable for data only through the services that hold CDE data.
-  via_services            = ["sqs", "rds", "secretsmanager"]
+  description = "FinCore ${var.environment}: cardholder-data zone (SQS, Aurora, its secrets, its nodes' volumes)"
+  # Usable for data only through the services that hold CDE data (ec2: the
+  # CDE nodes' root volumes, launched by Karpenter).
+  via_services            = ["sqs", "rds", "secretsmanager", "ec2"]
   log_group_arn_patterns  = ["arn:${local.partition}:logs:${var.region}:${var.aws_account_id}:log-group:/aws/rds/cluster/${local.name}/*"]
   deletion_window_in_days = 30
   tags                    = local.tags

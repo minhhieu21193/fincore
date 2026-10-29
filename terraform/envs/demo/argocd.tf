@@ -68,7 +68,8 @@ resource "helm_release" "root_app" {
                 publicSubnetCidrs          = module.network.public_subnet_cidrs
                 databaseSubnetCidrs        = module.network.database_subnet_cidrs
                 vaultKmsKeyId              = local.vault ? module.vault_kms[0].key_arn : ""
-                kmsKeyArn                  = module.platform_kms.key_arn
+                platformKmsKeyArn          = module.platform_kms.key_arn
+                cdeKmsKeyArn               = module.cde_kms.key_arn
                 wafAclArn                  = module.waf.web_acl_arn
                 backupBucket               = module.backups.bucket_name
               }

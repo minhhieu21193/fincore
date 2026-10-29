@@ -14,6 +14,30 @@ data "aws_region" "current" {}
 
 locals {
   region = data.aws_region.current.region
+
+  # Karpenter launches nodes whose root volumes use the platform key (general
+  # nodes) or the CDE key (cardholder-data-zone nodes; EC2NodeClass kmsKeyID).
+  # EC2 calls KMS on the controller's behalf, so the controller may use the two
+  # keys only through EC2, and may create grants only for AWS resources.
+  karpenter_ebs_kms_statements = [
+    {
+      sid       = "EbsVolumeGrants"
+      actions   = ["kms:CreateGrant"]
+      resources = [var.platform_kms_key_arn, var.cde_kms_key_arn]
+      condition = [
+        { test = "Bool", variable = "kms:GrantIsForAWSResource", values = ["true"] },
+        { test = "StringEquals", variable = "kms:ViaService", values = ["ec2.${local.region}.amazonaws.com"] },
+      ]
+    },
+    {
+      sid       = "EbsVolumeKeys"
+      actions   = ["kms:GenerateDataKeyWithoutPlaintext", "kms:Decrypt", "kms:ReEncrypt*", "kms:DescribeKey"]
+      resources = [var.platform_kms_key_arn, var.cde_kms_key_arn]
+      condition = [
+        { test = "StringEquals", variable = "kms:ViaService", values = ["ec2.${local.region}.amazonaws.com"] },
+      ]
+    },
+  ]
 }
 
 module "eks" {
@@ -127,6 +151,8 @@ module "karpenter" {
 
   # Spot interruption handling: SQS queue fed by EventBridge rules.
   enable_spot_termination = true
+
+  iam_policy_statements = local.karpenter_ebs_kms_statements
 
   node_iam_role_use_name_prefix = false
   node_iam_role_name            = "${var.name}-karpenter-node"
@@ -353,8 +379,34 @@ module "cert_manager_pod_identity" {
   tags = var.tags
 }
 
-# The CDE key only through Secrets Manager, and only for the CDE secrets.
-data "aws_iam_policy_document" "external_secrets_cde" {
+# External Secrets reads the FinCore secrets, and may open each key only
+# through Secrets Manager and only for the secrets of that key's domain
+# (Secrets Manager puts the secret's ARN in the encryption context). The
+# module's own External Secrets policy is not used: its kms:Decrypt has no
+# conditions, and with no key listed it falls back to every key.
+data "aws_iam_policy_document" "external_secrets" {
+  statement {
+    sid       = "ReadSecrets"
+    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret", "secretsmanager:ListSecretVersionIds"]
+    resources = concat(var.platform_secret_arns, var.cde_secret_arns)
+  }
+
+  statement {
+    sid       = "DecryptPlatformSecrets"
+    actions   = ["kms:Decrypt"]
+    resources = [var.platform_kms_key_arn]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["secretsmanager.${local.region}.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "kms:EncryptionContext:SecretARN"
+      values   = var.platform_secret_arns
+    }
+  }
+
   statement {
     sid       = "DecryptCdeSecrets"
     actions   = ["kms:Decrypt"]
@@ -376,13 +428,9 @@ module "external_secrets_pod_identity" {
   source  = "terraform-aws-modules/eks-pod-identity/aws"
   version = "2.10.0"
 
-  name                                  = "${var.name}-external-secrets"
-  attach_external_secrets_policy        = true
-  external_secrets_secrets_manager_arns = concat(var.platform_secret_arns, var.cde_secret_arns)
-  external_secrets_kms_key_arns         = [var.platform_kms_key_arn]
-  external_secrets_create_permission    = false
-  attach_custom_policy                  = true
-  source_policy_documents               = [data.aws_iam_policy_document.external_secrets_cde.json]
+  name                    = "${var.name}-external-secrets"
+  attach_custom_policy    = true
+  source_policy_documents = [data.aws_iam_policy_document.external_secrets.json]
   associations = {
     this = {
       cluster_name    = module.eks.cluster_name

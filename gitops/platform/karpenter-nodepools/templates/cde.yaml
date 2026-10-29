@@ -29,6 +29,9 @@ spec:
         volumeSize: 40Gi
         volumeType: gp3
         encrypted: true
+        {{- with .Values.cde.ebsKmsKeyId }}
+        kmsKeyID: {{ . }}
+        {{- end }}
         deleteOnTermination: true
   tags:
     Project: fincore

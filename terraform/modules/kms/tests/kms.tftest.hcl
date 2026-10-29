@@ -42,7 +42,7 @@ run "cde_key_only_through_its_services" {
   command = plan
 
   variables {
-    via_services           = ["sqs", "rds", "secretsmanager"]
+    via_services           = ["sqs", "rds", "secretsmanager", "ec2"]
     log_group_arn_patterns = ["arn:aws:logs:ap-southeast-1:000000000000:log-group:/aws/rds/cluster/fincore-demo/*"]
   }
 
@@ -53,11 +53,11 @@ run "cde_key_only_through_its_services" {
       contains(s.actions, "kms:Decrypt") && contains(s.actions, "kms:GenerateDataKey*") &&
       anytrue([for c in s.condition :
         c.test == "StringNotEquals" && c.variable == "kms:ViaService" &&
-        toset(c.values) == toset(["sqs.ap-southeast-1.amazonaws.com", "rds.ap-southeast-1.amazonaws.com", "secretsmanager.ap-southeast-1.amazonaws.com"])
+        toset(c.values) == toset(["sqs.ap-southeast-1.amazonaws.com", "rds.ap-southeast-1.amazonaws.com", "secretsmanager.ap-southeast-1.amazonaws.com", "ec2.ap-southeast-1.amazonaws.com"])
       ]) &&
       anytrue([for c in s.condition : c.variable == "aws:PrincipalIsAWSService" && toset(c.values) == toset(["false"])])
     ])
-    error_message = "The CDE key must deny direct data use outside SQS, RDS and Secrets Manager."
+    error_message = "The CDE key must deny direct data use outside SQS, RDS, Secrets Manager and EC2 (node volumes)."
   }
   assert {
     condition = anytrue([

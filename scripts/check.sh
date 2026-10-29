@@ -106,6 +106,16 @@ kubeconform_envs() {
   fi
   [[ "$(yq 'select(.kind == "Rollout") | .spec.template.spec.containers[0].env[] | select(.name == "DB_PASSWORD") | .valueFrom.secretKeyRef.name' "$sm/ledger.yaml")" == ledger-db ]] ||
     { echo "aws (secrets-manager): the ledger must read DB_PASSWORD from Secret ledger-db"; return 1; }
+  # AWS: no backup may contain the cardholder-data zone's Secrets, and the
+  # zone's nodes encrypt their disks with the CDE key (general nodes: platform key).
+  local schedules
+  schedules="$(yq -o=json -I=0 'select(.kind == "Schedule") | .spec.template' "$out/aws/velero.yaml")"
+  if jq -e -s 'any(.[]; (.includedNamespaces // [] | index("fincore-cde")) and (.excludedResources // [] | index("secrets") | not))' <<<"$schedules" >/dev/null; then
+    echo "aws: a Velero schedule backs up fincore-cde Secrets"; return 1
+  fi
+  [[ "$(yq 'select(.kind == "EC2NodeClass" and .metadata.name == "cde") | .spec.blockDeviceMappings[0].ebs.kmsKeyID' "$out/aws/karpenter-nodepools.yaml")" == "$(yq '.cluster.cdeKmsKeyArn' gitops/ci/aws-cluster.example.yaml)" &&
+     "$(yq 'select(.kind == "EC2NodeClass" and .metadata.name != "cde") | .spec.blockDeviceMappings[0].ebs.kmsKeyID' "$out/aws/karpenter-nodepools.yaml")" == "$(yq '.cluster.platformKmsKeyArn' gitops/ci/aws-cluster.example.yaml)" ]] ||
+    { echo "aws: EC2NodeClass root volumes must use the CDE key (cde) and the platform key (general)"; return 1; }
   for env in kind aws aws-secrets-manager; do
     kubeconform -strict -summary -kubernetes-version "$K8S_VERSION" \
       -schema-location default \

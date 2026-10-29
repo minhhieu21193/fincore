@@ -96,17 +96,58 @@ run "other_workloads_stay_in_their_domain" {
     ])
     error_message = "Backup writers may use only the backups key, for the backup bucket."
   }
+  # External Secrets: every KMS statement is bound to Secrets Manager and to
+  # the secrets of that key's domain; no unconditioned Decrypt on any key.
   assert {
     condition = alltrue([
-      for s in data.aws_iam_policy_document.external_secrets_cde.statement :
-      toset(s.resources) == toset([var.cde_kms_key_arn]) && toset(s.actions) == toset(["kms:Decrypt"]) &&
-      anytrue([for c in s.condition : c.variable == "kms:EncryptionContext:SecretARN" && toset(c.values) == toset(var.cde_secret_arns)])
+      for s in data.aws_iam_policy_document.external_secrets.statement :
+      !anytrue([for a in s.actions : startswith(a, "kms:")]) || (
+        toset(s.actions) == toset(["kms:Decrypt"]) && length(s.resources) == 1 &&
+        anytrue([for c in s.condition : c.test == "StringEquals" && c.variable == "kms:ViaService" && toset(c.values) == toset(["secretsmanager.ap-southeast-1.amazonaws.com"])]) &&
+        anytrue([for c in s.condition : c.test == "StringEquals" && c.variable == "kms:EncryptionContext:SecretARN" && toset(c.values) == toset(
+          contains(s.resources, var.cde_kms_key_arn) ? var.cde_secret_arns : var.platform_secret_arns
+        )])
+      )
     ])
-    error_message = "External Secrets may open the CDE key only for the CDE secrets."
+    error_message = "External Secrets may open each key only through Secrets Manager, for that key's secrets."
+  }
+  assert {
+    condition = (
+      anytrue([for s in data.aws_iam_policy_document.external_secrets.statement : toset(s.resources) == toset([var.platform_kms_key_arn])]) &&
+      anytrue([for s in data.aws_iam_policy_document.external_secrets.statement : toset(s.resources) == toset([var.cde_kms_key_arn])])
+    )
+    error_message = "External Secrets needs a (conditioned) statement for the platform key and for the CDE key."
   }
   assert {
     condition     = length(data.aws_iam_policy_document.vault) == 1
     error_message = "With Vault, its auto-unseal policy exists."
+  }
+}
+
+run "karpenter_uses_node_keys_only_through_ec2" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for st in local.karpenter_ebs_kms_statements :
+      toset(st.resources) == toset([var.platform_kms_key_arn, var.cde_kms_key_arn]) &&
+      anytrue([for c in st.condition : c.test == "StringEquals" && c.variable == "kms:ViaService" && toset(c.values) == toset(["ec2.ap-southeast-1.amazonaws.com"])])
+    ])
+    error_message = "The Karpenter controller may use the platform and CDE keys only through EC2."
+  }
+  assert {
+    condition = alltrue([
+      for st in local.karpenter_ebs_kms_statements :
+      !contains(st.actions, "kms:CreateGrant") ||
+      anytrue([for c in st.condition : c.variable == "kms:GrantIsForAWSResource" && toset(c.values) == toset(["true"])])
+    ])
+    error_message = "Karpenter may create grants only for AWS resources."
+  }
+  assert {
+    condition = toset(flatten([for st in local.karpenter_ebs_kms_statements : st.actions])) == toset([
+      "kms:CreateGrant", "kms:GenerateDataKeyWithoutPlaintext", "kms:Decrypt", "kms:ReEncrypt*", "kms:DescribeKey",
+    ])
+    error_message = "Karpenter gets exactly what EC2 needs to launch encrypted volumes (no Encrypt, no GenerateDataKey with plaintext)."
   }
 }
 

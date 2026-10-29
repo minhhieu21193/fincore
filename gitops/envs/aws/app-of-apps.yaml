@@ -17,10 +17,13 @@ components:
     clusterValues: |
       clusterName: {{ .Values.cluster.name }}
       nodeRole: {{ .Values.cluster.karpenterNodeRole }}
+      ebsKmsKeyId: {{ .Values.cluster.platformKmsKeyArn }}
+      cde:
+        ebsKmsKeyId: {{ .Values.cluster.cdeKmsKeyArn }}
   storage:
     enabled: true
     clusterValues: |
-      kmsKeyId: {{ .Values.cluster.kmsKeyArn }}
+      kmsKeyId: {{ .Values.cluster.platformKmsKeyArn }}
   kyverno: { enabled: true }
   policies:
     enabled: true

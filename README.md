@@ -178,7 +178,7 @@ Argo CD on kind syncs from your **local commits**: an in-cluster, read-only git 
   - the EBS CSI driver for Vault's Raft storage;
   - AWS WAF on the API's ALB;
   - a multi-region CloudTrail to an encrypted, versioned S3 bucket and CloudWatch Logs.
-- **KMS per data domain:** CDE (SQS, Aurora, the secrets that open it), platform (EKS Secrets, EBS, ECR, logs), backups, Vault unseal and audit. The CDE key works only through SQS, RDS and Secrets Manager. payments-api and the notifier may use it only for the payment-events queue (`kms:EncryptionContext`). Offline `terraform test` checks both ([compliance mapping](docs/compliance-mapping.md)).
+- **KMS per data domain:** CDE (SQS, Aurora, the secrets that open it), platform (EKS Secrets, EBS, ECR, logs), backups, Vault unseal and audit. The CDE key works only through SQS, RDS, Secrets Manager and EC2 (the CDE nodes' disks), and Velero backs up the zone without its Secrets. payments-api and the notifier may use it only for the payment-events queue (`kms:EncryptionContext`). Offline `terraform test` checks both ([compliance mapping](docs/compliance-mapping.md)).
 - **Profiles:** `FINCORE_PROFILE=small-team scripts/up.sh` runs 2 system nodes, one NAT gateway and Secrets Manager instead of Vault HA, for $31.69/day instead of $34.39 ([cost](docs/cost.md#small-team-profile)).
 
 ```bash
@@ -195,13 +195,14 @@ The `allowed_account_ids` provider guard refuses to run against any other accoun
 |---|---|
 | [Architecture](docs/architecture.md) | Network, cluster, CDE boundary, payment flow, GitOps flow, observability, backups |
 | [ADRs](docs/adr/README.md) | Karpenter, Argo CD, Vault + Secrets Manager, SQS outbox, Aurora Serverless v2, and what was considered but not chosen |
-| [Runbooks](docs/runbooks/README.md) | Payment failures, canary rollback, Vault sealed, node pressure, DB failover, ledger imbalance |
+| [Runbooks](docs/runbooks/README.md) | Payment failures, canary rollback, Vault sealed, node pressure, DB failover, ledger imbalance, disaster recovery |
 | [Postmortems](docs/postmortems/) | Two incidents found by the Phase 3 tests |
 | [Cost](docs/cost.md) | AWS hourly, daily, per 1,000 payments; assumptions; Spot share |
 | [PCI DSS mapping](docs/compliance-mapping.md) | Each control mapped to the requirement it illustrates (illustrative, not an assessment) |
 | [Results and evidence](docs/phase-3-results.md) | Phase [1](docs/phase-1-results.md), [2](docs/phase-2-results.md), [3](docs/phase-3-results.md), with raw logs in `docs/evidence/` |
 | [Decisions log](docs/decisions-log.md) | Every decision taken during the build, with the reason |
 | [Demo script](docs/demo-script.md) | A 3–5 minute walkthrough for a screen recording |
+| [AWS demo day](docs/aws-demo-day.md) | What only AWS can prove (KMS contexts, DLQ move, node volumes, restore, teardown): commands, expected results, screenshots, fixes |
 
 ## Repository layout
 
